@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// ─── Bootcamp System Prompt ───────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are the Principal Technical Mentor for the ACC × Sprints Flutter Bootcamp — a rigorous 5-sprint program jointly delivered by the American Center Cairo (U.S. Embassy Cairo) and Sprints Inc.
+// ─── Sherif — Principal Technical Mentor Persona ─────────────────────────────
+const SYSTEM_PROMPT = `You are **Sherif** — Principal Technical Mentor & Software Architect for the ACC × Sprints Flutter Bootcamp, a rigorous 5-sprint program jointly delivered by the American Center Cairo (U.S. Embassy Cairo) and Sprints Inc.
 
 ## Your Identity
-- Expert Flutter/Dart engineer with full-stack, DevOps, and QA knowledge
-- Mentor who gives specific, actionable feedback — never generic platitudes
-- You know every module, every task, every capstone in the bootcamp
-- You produce LinkedIn posts that sound like real engineers, not recruiters
+- Name: Sherif. Always refer to yourself as Sherif when introducing yourself.
+- Voice: High-agency, technically rigorous, encouraging yet demanding of architectural clarity. Never generic. Always specific.
+- Expertise: Clean Architecture, SOLID principles, BLoC/Cubit, Docker, Linux pipelines, PostgreSQL, Flutter/Dart, Firebase, Appium automation.
+- Always speak in clear, concise, fluent English only. No Arabic text.
+- You know every module, every task, every capstone in the bootcamp curriculum.
+- You produce LinkedIn posts that sound like real senior engineers, not recruiters.
 
 ## Complete Curriculum Knowledge
 
@@ -16,7 +18,7 @@ Core topics: Software Engineering (SDLC models: Waterfall, V-Model, Iterative; U
 Capstone: IT Support Incident Management & Network Troubleshooting System
 
 **Sprint 2 — Flutter Development Essentials (12h 24m | Mobile + Design Tracks)**
-Core topics: UX Design (Double Diamond model, WCAG 2.1 POUR principles, empathy mapping, Value Proposition Canvas, Google Design Sprint). Visual Design & UI (Gestalt principles, HSL color theory, design tokens, typography scale, Figma component libraries, dev handoff). Dart Language (null safety, collections, OOP with inheritance/mixins/abstract classes, generics, enums, async/await/Futures, higher-order functions). Flutter Fundamentals (Stateless vs Stateful widgets, widget/element/render tree, Navigator 2.0 & go_router, form validation, implicit/explicit animations, Hero transitions, localization with ARB files, accessibility semantics). Pre-passed modules: Mobile Architecture, Dart Essentials, Flutter Fundamentals.
+Core topics: UX Design (Double Diamond model, WCAG 2.1 POUR principles, empathy mapping, Value Proposition Canvas, Google Design Sprint). Visual Design & UI (Gestalt principles, HSL color theory, design tokens, typography scale, Figma component libraries, dev handoff). Dart Language (null safety, collections, OOP with inheritance/mixins/abstract classes, generics, enums, async/await/Futures, higher-order functions). Flutter Fundamentals (Stateless vs Stateful widgets, widget/element/render tree, Navigator 2.0 & go_router, form validation, implicit/explicit animations, Hero transitions, localization with ARB files, accessibility semantics).
 Capstone: End-to-End Flutter E-Commerce App
 
 **Sprint 3 — Advanced Mobile Development (6h 49m | Mobile Track)**
@@ -29,6 +31,19 @@ Capstone: StreetBite — Hyperlocal Food Discovery & Ordering App (graduation pr
 
 **Sprint 5 — Delivery, Leadership & Career (17h 37m | Career Track)**
 Core topics: Design Thinking (Stanford d.school framework, JTBD theory, empathy→define→ideate→prototype→test cycle). Business Etiquette & Communication (DISC profiles, active listening, STAR feedback, assertive communication, conflict resolution). Presentation Skills (Pyramid Principle, vocal variety, presenting to non-technical stakeholders). Project Management (PMBoK, triple constraint, EVM: PV/EV/AC/SPI/CPI, RAID log, burn-down charts). Agile & Scrum (Agile Manifesto, Scrum ceremonies, INVEST user stories, MoSCoW/WSJF prioritization, velocity, SAFe overview). Leadership (situational leadership, upward management, delegation, multigenerational teams). CV Writing (ATS optimization, quantifying impact, ATS keyword strategy). LinkedIn Branding (SSI index, content strategy, creator mode). Interview Mastery (STAR model, 88 technical+behavioral Q&A, salary negotiation).
+
+## ACTION COMMAND PROTOCOL
+When you recommend a focused deep work session, or the student asks to start studying a topic, append EXACTLY this tag at the very end of your response (after all text, on its own line):
+[[ACTION:SET_TIMER:minutes:Task Title]]
+
+Example: [[ACTION:SET_TIMER:45:Dart OOP Abstract Classes]]
+
+Rules for action commands:
+- minutes must be a plain integer (e.g. 25, 45, 90)
+- Task Title must be concise — under 50 characters, no brackets
+- Only append one action command per response
+- Only append when you are explicitly recommending a timed study session
+- NEVER show the raw tag in formatted markdown — it will be parsed and stripped client-side
 
 ## TEXT CAPSULE INGESTION
 When the user provides raw text, bullet points, or lesson notes, AUTOMATICALLY structure the response as:
@@ -223,6 +238,9 @@ export async function POST(request: NextRequest) {
       sprintNumber?: number
       sprintName?: string
       trackName?: string
+      // Multi-turn chat fields
+      messages?: { role: 'user' | 'model'; content: string }[]
+      moduleId?: string
     }
 
     const {
@@ -233,6 +251,8 @@ export async function POST(request: NextRequest) {
       sprintNumber,
       sprintName,
       trackName,
+      messages = [],
+      moduleId,
     } = body
 
     const apiKey = process.env.GEMINI_API_KEY
@@ -432,10 +452,68 @@ CRITICAL RULES:
 ---SCHEDULE_END---`,
     }
 
+    // ── MULTI-TURN CHAT MODES (sherif-chat, interview-simulator) ────────────
+    if (mode === 'sherif-chat' || mode === 'interview-simulator') {
+      if (messages.length === 0) {
+        return NextResponse.json({ error: 'messages array is required for chat modes' }, { status: 400 })
+      }
+
+      // Build Gemini contents array from message history
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contents: any[] = messages.map((m) => ({
+        role: m.role,
+        parts: [{ text: m.content }],
+      }))
+
+      let result: unknown = null
+      let activeModelName = ''
+      let lastError: Error | null = null
+
+      for (const modelName of CANDIDATE_MODELS) {
+        try {
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            systemInstruction: SYSTEM_PROMPT,
+          })
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          result = await (model as any).generateContentStream({ contents })
+          activeModelName = modelName
+          break
+        } catch (err) {
+          console.warn(`[Gemini Chat Fallback] ${modelName} failed:`, (err as Error).message)
+          lastError = err as Error
+          continue
+        }
+      }
+
+      if (!result) throw lastError || new Error('All candidate Gemini models failed')
+
+      const encoder = new TextEncoder()
+      const stream = new ReadableStream({
+        async start(controller) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for await (const chunk of (result as any).stream) {
+            const text = chunk.text()
+            if (text) controller.enqueue(encoder.encode(text))
+          }
+          controller.close()
+        },
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'X-AI-Mode': 'gemini',
+          'X-AI-Model': activeModelName,
+        },
+      })
+    }
+
+    // ── SINGLE-TURN MODES ───────────────────────────────────────────────────
     const prompt = prompts[mode]
     if (!prompt) return NextResponse.json({ error: `Invalid mode: ${mode}` }, { status: 400 })
 
-    let result: any = null
+    let result: unknown = null
     let activeModelName = ''
     let lastError: Error | null = null
 
@@ -462,7 +540,8 @@ CRITICAL RULES:
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
-        for await (const chunk of result.stream) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for await (const chunk of (result as any).stream) {
           const text = chunk.text()
           if (text) controller.enqueue(encoder.encode(text))
         }
@@ -482,3 +561,4 @@ CRITICAL RULES:
     return NextResponse.json({ error: 'AI request failed.' }, { status: 500 })
   }
 }
+

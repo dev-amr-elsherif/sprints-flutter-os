@@ -3,15 +3,25 @@
 import { useState, useRef, useCallback } from 'react'
 import type { AiMode } from '@/lib/types'
 
+export interface ChatMessage {
+  role: 'user' | 'model'
+  content: string
+}
+
 interface UseAiStreamOptions {
-  mode: AiMode
-  moduleTitle: string
+  mode: AiMode | 'sherif-chat' | 'interview-simulator'
+  moduleTitle?: string
   userInput?: string
+  moduleId?: string
+  // Multi-turn chat
+  messages?: ChatMessage[]
   // LinkedIn scope fields
   scope?: 'module' | 'sprint' | 'track'
   sprintNumber?: number
   sprintName?: string
   trackName?: string
+  // Callback for each text chunk (used by interview panel for action parsing)
+  onChunk?: (chunk: string) => void
 }
 
 interface UseAiStreamReturn {
@@ -42,12 +52,15 @@ export function useAiStream(): UseAiStreamReturn {
 
   const run = useCallback(async ({
     mode,
-    moduleTitle,
+    moduleTitle = '',
     userInput = '',
+    moduleId,
+    messages,
     scope,
     sprintNumber,
     sprintName,
     trackName,
+    onChunk,
   }: UseAiStreamOptions) => {
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -67,6 +80,8 @@ export function useAiStream(): UseAiStreamReturn {
           mode,
           moduleTitle,
           userInput,
+          ...(moduleId && { moduleId }),
+          ...(messages && { messages }),
           ...(scope && { scope }),
           ...(sprintNumber !== undefined && { sprintNumber }),
           ...(sprintName && { sprintName }),
@@ -92,7 +107,9 @@ export function useAiStream(): UseAiStreamReturn {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        setResponse((prev) => prev + decoder.decode(value, { stream: true }))
+        const chunk = decoder.decode(value, { stream: true })
+        if (onChunk) onChunk(chunk)
+        setResponse((prev) => prev + chunk)
       }
 
       setIsStreaming(false)
