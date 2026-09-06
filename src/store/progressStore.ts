@@ -33,6 +33,8 @@ export const useProgressStore = create<ProgressStore>()(
       focusedModuleId: null,
       focusedTaskTitle: null,
       focusedTaskDurationSecs: null,
+      // Sherif OS Controller — non-persisted active plan
+      activeDailyPlan: null,
 
       // ─── Module status actions ───────────────────────────────────────────
       cycleModuleStatus: (id: string, currentEffective: ItemStatus) =>
@@ -157,6 +159,9 @@ export const useProgressStore = create<ProgressStore>()(
           focusedTaskDurationSecs: durationMinutes * 60,
           focusedModuleId: moduleId ?? null,
         }),
+
+      // ─── Sherif OS Controller ─────────────────────────────────────────────
+      setActiveDailyPlan: (plan) => set({ activeDailyPlan: plan }),
     }),
     {
       name: 'sprints-os-v2-progress',

@@ -293,17 +293,21 @@ function CoreTaskCard({
 
 // --- Main component ---
 export function AiDailyPlanner() {
-  const { moduleStatuses, setFocusedModule } = useProgressStore()
+  const { moduleStatuses, setFocusedModule, activeDailyPlan, setActiveDailyPlan } = useProgressStore()
   const [studyHours, setStudyHours] = useState<1 | 2 | 3 | 4>(2)
   const [customMinutes, setCustomMinutes] = useState('')
   const [energy, setEnergy] = useState<EnergyLevel>('balanced')
   const [rawResponse, setRawResponse] = useState('')
-  const [schedule, setSchedule] = useState<DailyPlanSchedule | null>(null)
+  const [localSchedule, setLocalSchedule] = useState<DailyPlanSchedule | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [isMock, setIsMock] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+
+  // Sherif's dispatched plan takes priority over locally generated plan
+  const schedule = activeDailyPlan ?? localSchedule
+  const isFromSherif = !!activeDailyPlan
 
   const eligibleModules = useMemo(() => getEligibleNextModules(moduleStatuses), [moduleStatuses])
   const completedCount = useMemo(
@@ -326,13 +330,22 @@ export function AiDailyPlanner() {
 
   // Swap a core task in the current schedule
   const handleSwapTask = useCallback((index: number, newTask: DailyPlanTask) => {
-    setSchedule((prev) => {
-      if (!prev) return prev
-      const updated = [...prev.coreTasks]
-      updated[index] = newTask
-      return { ...prev, coreTasks: updated }
-    })
-  }, [])
+    if (isFromSherif) {
+      // Swap inside Sherif's plan via store
+      const updated = schedule ? { ...schedule, coreTasks: [...schedule.coreTasks] } : null
+      if (updated) {
+        updated.coreTasks[index] = newTask
+        setActiveDailyPlan(updated)
+      }
+    } else {
+      setLocalSchedule((prev) => {
+        if (!prev) return prev
+        const updated = [...prev.coreTasks]
+        updated[index] = newTask
+        return { ...prev, coreTasks: updated }
+      })
+    }
+  }, [isFromSherif, schedule, setActiveDailyPlan])
 
   const handleGenerate = useCallback(async () => {
     abortRef.current?.abort()
@@ -340,7 +353,8 @@ export function AiDailyPlanner() {
     abortRef.current = controller
 
     setRawResponse('')
-    setSchedule(null)
+    setLocalSchedule(null)
+    setActiveDailyPlan(null) // Clear any Sherif plan when manually generating
     setIsLoading(true)
     setIsStreaming(false)
     setIsMock(false)
@@ -378,22 +392,24 @@ export function AiDailyPlanner() {
         setRawResponse(full)
       }
       setIsStreaming(false)
-      setSchedule(parseSchedule(full))
+      setLocalSchedule(parseSchedule(full))
     } catch (err) {
       if ((err as Error).name === 'AbortError') return
       setIsLoading(false)
       setIsStreaming(false)
     }
-  }, [effectiveMinutes, energy, eligibleModules])
+  }, [effectiveMinutes, energy, eligibleModules, setActiveDailyPlan])
 
   const handleReset = () => {
     abortRef.current?.abort()
     setRawResponse('')
-    setSchedule(null)
+    setLocalSchedule(null)
+    setActiveDailyPlan(null) // Also clear Sherif's plan
   }
 
   const coreMinutes = schedule?.coreTasks.reduce((s, t) => s + t.durationMinutes, 0) ?? 0
   const currentPlanModuleIds = schedule?.coreTasks.map((t) => t.moduleId) ?? []
+
 
   return (
     <div className="glass rounded-2xl border border-white/[0.06] overflow-hidden">
@@ -552,6 +568,11 @@ export function AiDailyPlanner() {
                         <div className="flex items-center gap-1.5">
                           <Tag className="w-3 h-3 text-white/30" />
                           <span className="text-[10px] text-white/30 uppercase tracking-wider">Today's Strategy</span>
+                          {isFromSherif && (
+                            <span className="ml-auto flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-400/25">
+                              ⚡ Synced by Sherif
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-white/60 leading-relaxed">{schedule.strategySummary}</p>
                         {schedule.focusTags.length > 0 && (

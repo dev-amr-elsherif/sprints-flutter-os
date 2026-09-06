@@ -108,6 +108,8 @@ export interface ProgressStore {
   focusedModuleId: string | null
   focusedTaskTitle: string | null          // display label on timer
   focusedTaskDurationSecs: number | null   // custom duration (seconds) injected from planner
+  // Sherif OS Controller — active daily plan (non-persisted, set by Sherif dispatch)
+  activeDailyPlan: DailyPlanSchedule | null
 
   // Actions
   cycleModuleStatus: (id: string, currentEffective: ItemStatus) => void
@@ -131,6 +133,8 @@ export interface ProgressStore {
   setFocusedModule: (id: string | null) => void
   /** Inject a task into the Pomodoro timer from the planner or module card */
   setFocusedTask: (taskTitle: string, durationMinutes: number, moduleId?: string) => void
+  /** Set or clear the active daily plan (dispatched by Sherif OS Controller) */
+  setActiveDailyPlan: (plan: DailyPlanSchedule | null) => void
 }
 
 // ─── AI Daily Planner schedule types ─────────────────────────────────────────
@@ -156,3 +160,27 @@ export interface AiRequestPayload {
   moduleTitle: string
   userInput?: string
 }
+
+// ─── Sherif OS Controller — Action Protocol ───────────────────────────────────
+export type SherifActionType =
+  | 'SET_VIEW'
+  | 'SET_DAILY_PLAN'
+  | 'SET_TIMER'
+  | 'TOGGLE_LESSON'
+  | 'SET_MODULE_STATUS'
+  | 'NAVIGATE_TO_MODULE'
+  | 'TOGGLE_ZEN_MODE'
+  | 'SAVE_ARTIFACT'
+  | 'RESET_PROGRESS'
+
+export type SherifAction =
+  | { type: 'SET_VIEW'; payload: { viewMode: ViewMode; sprint?: SprintNumber | 'all' } }
+  | { type: 'SET_DAILY_PLAN'; payload: DailyPlanSchedule }
+  | { type: 'SET_TIMER'; payload: { durationMinutes: number; taskTitle: string; moduleId?: string } }
+  | { type: 'TOGGLE_LESSON'; payload: { lessonId: string; completed: boolean } }
+  | { type: 'SET_MODULE_STATUS'; payload: { moduleId: string; status: ItemStatus } }
+  | { type: 'NAVIGATE_TO_MODULE'; payload: { moduleId: string } }
+  | { type: 'TOGGLE_ZEN_MODE'; payload: { enabled: boolean } }
+  | { type: 'SAVE_ARTIFACT'; payload: { moduleId: string; repoUrl?: string; prUrl?: string; demoUrl?: string } }
+  | { type: 'RESET_PROGRESS'; payload: Record<string, never> }
+

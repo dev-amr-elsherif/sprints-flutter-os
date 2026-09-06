@@ -2,27 +2,128 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Bot, RotateCcw, Minus, ChevronDown } from 'lucide-react'
+import { X, Send, Bot, RotateCcw, Minus, ChevronDown, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProgressStore } from '@/store/progressStore'
 import { computeStats, getEffectiveStatus } from '@/lib/utils'
 import { CURRICULUM } from '@/lib/curriculum'
+import type { SherifAction, DailyPlanSchedule } from '@/lib/types'
 
 interface ChatMessage {
   id: string
   role: 'user' | 'sherif'
   text: string
+  executedActions?: string[] // Labels of executed actions for receipt pill
 }
 
-const ACTION_RE = /\[\[ACTION:SET_TIMER:(\d+):([^\]]+)\]\]/
+// ── Regex to parse the full ACTION:DISPATCH block (greedy, multi-line) ──
+const DISPATCH_RE = /\[\[ACTION:DISPATCH:([\s\S]*?)\]\]/
 
-function stripAction(text: string) {
-  return text.replace(ACTION_RE, '').trim()
+function stripDispatch(text: string): string {
+  return text.replace(DISPATCH_RE, '').trim()
+}
+
+function parseActions(text: string): SherifAction[] {
+  const match = text.match(DISPATCH_RE)
+  if (!match) return []
+  try {
+    const raw = JSON.parse(match[1].trim())
+    if (!Array.isArray(raw)) return []
+    return raw as SherifAction[]
+  } catch {
+    return []
+  }
+}
+
+function actionLabel(action: SherifAction): string {
+  switch (action.type) {
+    case 'SET_VIEW': return `Switched to ${action.payload.viewMode === 'official-sprints' ? 'Sprints' : 'Tracks'} view${action.payload.sprint && action.payload.sprint !== 'all' ? ` · Sprint ${action.payload.sprint}` : ''}`
+    case 'SET_DAILY_PLAN': return `Synced Daily Plan (${action.payload.coreTasks?.length ?? 0} tasks)`
+    case 'SET_TIMER': return `Set ${action.payload.durationMinutes}m Timer: ${action.payload.taskTitle}`
+    case 'TOGGLE_LESSON': return `Lesson ${action.payload.completed ? 'checked' : 'unchecked'}`
+    case 'SET_MODULE_STATUS': return `Module → ${action.payload.status}`
+    case 'NAVIGATE_TO_MODULE': return `Navigated to module`
+    case 'TOGGLE_ZEN_MODE': return `Zen Mode ${action.payload.enabled ? 'ON' : 'OFF'}`
+    case 'SAVE_ARTIFACT': return `Artifact saved`
+    case 'RESET_PROGRESS': return `Progress reset`
+    default: return 'Action executed'
+  }
+}
+
+// ── Execute a list of Sherif actions against the Zustand store + DOM ──
+function executeActions(actions: SherifAction[], confirmReset: () => boolean): string[] {
+  const store = useProgressStore.getState()
+  const labels: string[] = []
+
+  for (const action of actions) {
+    try {
+      switch (action.type) {
+        case 'SET_VIEW': {
+          store.setViewMode(action.payload.viewMode)
+          if (action.payload.sprint !== undefined) store.setActiveSprint(action.payload.sprint)
+          break
+        }
+        case 'SET_DAILY_PLAN': {
+          // Validate it has coreTasks before committing
+          const plan = action.payload as DailyPlanSchedule
+          if (plan && Array.isArray(plan.coreTasks)) {
+            store.setActiveDailyPlan(plan)
+          }
+          break
+        }
+        case 'SET_TIMER': {
+          store.setFocusedTask(action.payload.taskTitle, action.payload.durationMinutes, action.payload.moduleId)
+          break
+        }
+        case 'TOGGLE_LESSON': {
+          const current = store.lessonStatuses[action.payload.lessonId] === true
+          if (current !== action.payload.completed) {
+            store.toggleLesson(action.payload.lessonId)
+          }
+          break
+        }
+        case 'SET_MODULE_STATUS': {
+          store.setModuleStatus(action.payload.moduleId, action.payload.status)
+          break
+        }
+        case 'NAVIGATE_TO_MODULE': {
+          setTimeout(() => {
+            const el = document.getElementById(`module-${action.payload.moduleId}`)
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              el.classList.add('prereq-highlight-ring')
+              setTimeout(() => el.classList.remove('prereq-highlight-ring'), 3000)
+            }
+          }, 300)
+          break
+        }
+        case 'TOGGLE_ZEN_MODE': {
+          store.setZenMode(action.payload.enabled)
+          break
+        }
+        case 'SAVE_ARTIFACT': {
+          store.saveTaskArtifact(action.payload.moduleId, {
+            repoUrl: action.payload.repoUrl,
+            prUrl: action.payload.prUrl,
+            demoUrl: action.payload.demoUrl,
+          })
+          break
+        }
+        case 'RESET_PROGRESS': {
+          if (confirmReset()) store.resetProgress()
+          break
+        }
+      }
+      labels.push(actionLabel(action))
+    } catch (e) {
+      console.warn('[Sherif OS] Action failed:', action, e)
+    }
+  }
+  return labels
 }
 
 function MiniMD({ text }: { text: string }) {
-  const clean = stripAction(text)
-  const html = clean
+  const html = text
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white/90 font-semibold">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em class="text-white/70">$1</em>')
     .replace(/`([^`]+)`/g, '<code class="bg-white/10 text-cyan-300 px-1 py-0.5 rounded text-[11px] font-mono">$1</code>')
@@ -32,6 +133,23 @@ function MiniMD({ text }: { text: string }) {
   return (
     <div className="text-[13px] text-white/60 leading-relaxed"
       dangerouslySetInnerHTML={{ __html: `<p class="text-[13px] text-white/60 leading-relaxed">${html}</p>` }} />
+  )
+}
+
+function ExecutionPill({ labels }: { labels: string[] }) {
+  if (!labels.length) return null
+  return (
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+      className="mt-2 flex items-center gap-1.5 flex-wrap">
+      <span className="text-[10px] font-semibold text-emerald-300/70 flex items-center gap-1">
+        <Zap className="w-2.5 h-2.5" /> Executed:
+      </span>
+      {labels.map((l, i) => (
+        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300/80 border border-emerald-400/15">
+          {l}
+        </span>
+      ))}
+    </motion.div>
   )
 }
 
@@ -48,7 +166,10 @@ function Bubble({ msg }: { msg: ChatMessage }) {
         isSherif ? 'bg-white/[0.04] border border-white/[0.07] rounded-tl-sm' : 'bg-cyan-500/15 border border-cyan-400/20 text-cyan-100 rounded-tr-sm')}>
         {isSherif
           ? msg.text
-            ? <MiniMD text={msg.text} />
+            ? <>
+                <MiniMD text={msg.text} />
+                {msg.executedActions && <ExecutionPill labels={msg.executedActions} />}
+              </>
             : <span className="text-[12px] text-white/30 italic flex items-center gap-1.5"><Bot className="w-3 h-3 animate-pulse text-purple-400" /> Sherif is thinking…</span>
           : <p className="text-[13px]">{msg.text}</p>
         }
@@ -65,23 +186,44 @@ export function GlobalSherifCopilot() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [resetPending, setResetPending] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const { moduleStatuses, focusedTaskTitle, focusedTaskDurationSecs } = useProgressStore()
+  const {
+    moduleStatuses, focusedTaskTitle, focusedTaskDurationSecs,
+    viewMode, activeSprint, activeDailyPlan,
+  } = useProgressStore()
   const stats = computeStats(moduleStatuses)
 
-  const globalContext = (() => {
-    const overall = `${stats.overallPercentage}% overall (${stats.completedModules + stats.passedModules}/${stats.totalModules} modules)`
+  // ── Build live OS context snapshot ──────────────────────────────────────
+  const buildContext = useCallback(() => {
+    const completedIds = CURRICULUM
+      .filter((m) => {
+        const s = moduleStatuses[m.id]
+        return s === 'completed' || s === 'passed'
+      })
+      .map((m) => m.id)
     const nextMods = CURRICULUM
       .filter((m) => getEffectiveStatus(m.id, m.isPassed, moduleStatuses) === 'not-started')
-      .slice(0, 3).map((m) => m.title).join(', ')
-    const pomo = focusedTaskTitle
-      ? `Active Pomodoro: "${focusedTaskTitle}" (${focusedTaskDurationSecs ? Math.round(focusedTaskDurationSecs / 60) : '?'}min)`
-      : 'No active Pomodoro'
-    return `[STUDENT CONTEXT: ${overall} | Next up: ${nextMods || 'All done!'} | ${pomo}]`
-  })()
+      .slice(0, 5)
+      .map((m) => ({ id: m.id, title: m.title, sprint: m.sprint }))
+    const activePomodoro = focusedTaskTitle
+      ? { title: focusedTaskTitle, durationMins: focusedTaskDurationSecs ? Math.round(focusedTaskDurationSecs / 60) : null }
+      : null
+    return JSON.stringify({
+      viewMode,
+      activeSprint,
+      overallPercentage: stats.overallPercentage,
+      completedModules: completedIds.length,
+      totalModules: stats.totalModules,
+      completedModuleIds: completedIds.slice(-5), // last 5 completed
+      nextModules: nextMods,
+      activePomodoro,
+      hasDailyPlan: !!activeDailyPlan,
+    })
+  }, [moduleStatuses, focusedTaskTitle, focusedTaskDurationSecs, viewMode, activeSprint, activeDailyPlan, stats])
 
   const scrollDown = useCallback(() => { setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 60) }, [])
 
@@ -90,8 +232,8 @@ export function GlobalSherifCopilot() {
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading || isStreaming) return
     const userMsg: ChatMessage = { id: `u-${Date.now()}`, role: 'user', text: text.trim() }
-    const injected = `${text.trim()}\n\n${globalContext}`
-    const nextHist = [...apiHistory, { role: 'user' as const, content: injected }]
+    const systemContext = buildContext()
+    const nextHist = [...apiHistory, { role: 'user' as const, content: text.trim() }]
     setMessages((p) => [...p, userMsg])
     setInput('')
     setApiHistory(nextHist)
@@ -108,7 +250,12 @@ export function GlobalSherifCopilot() {
       const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'sherif-chat', moduleTitle: 'General Mentor Session', messages: nextHist }),
+        body: JSON.stringify({
+          mode: 'sherif-chat',
+          moduleTitle: 'Global Mentor Session',
+          messages: nextHist,
+          systemContext,
+        }),
         signal: ctrl.signal,
       })
       if (!res.ok) throw new Error(`AI error ${res.status}`)
@@ -123,20 +270,41 @@ export function GlobalSherifCopilot() {
         const { done, value } = await reader.read()
         if (done) break
         full += dec.decode(value, { stream: true })
-        setMessages((p) => p.map((m) => m.id === sherifId ? { ...m, text: full } : m))
+        // Strip dispatch block from live preview (show clean text while streaming)
+        setMessages((p) => p.map((m) => m.id === sherifId ? { ...m, text: stripDispatch(full) } : m))
       }
       setIsStreaming(false)
-      const clean = stripAction(full)
-      setMessages((p) => p.map((m) => m.id === sherifId ? { ...m, text: clean } : m))
-      setApiHistory((h) => [...h, { role: 'model', content: clean }])
+
+      // Parse and execute actions from the complete response
+      const actions = parseActions(full)
+      const cleanText = stripDispatch(full)
+      let executedLabels: string[] = []
+
+      if (actions.length > 0) {
+        const hasReset = actions.some((a) => a.type === 'RESET_PROGRESS')
+        if (hasReset) setResetPending(true)
+        executedLabels = executeActions(
+          actions.filter((a) => a.type !== 'RESET_PROGRESS'),
+          () => false // Reset requires UI confirmation — handled separately
+        )
+      }
+
+      setMessages((p) => p.map((m) => m.id === sherifId
+        ? { ...m, text: cleanText, executedActions: executedLabels.length ? executedLabels : undefined }
+        : m
+      ))
+      setApiHistory((h) => [...h, { role: 'model', content: cleanText }])
       scrollDown()
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
       setIsLoading(false)
       setIsStreaming(false)
-      setMessages((p) => p.map((m) => m.id === sherifId ? { ...m, text: `⚠️ ${(e as Error).message}` } : m))
+      setMessages((p) => p.map((m) => m.id === sherifId
+        ? { ...m, text: `⚠️ ${(e as Error).message}` }
+        : m
+      ))
     }
-  }, [isLoading, isStreaming, apiHistory, globalContext, scrollDown])
+  }, [isLoading, isStreaming, apiHistory, buildContext, scrollDown])
 
   const handleClear = () => {
     abortRef.current?.abort()
@@ -145,17 +313,44 @@ export function GlobalSherifCopilot() {
     setInput('')
     setIsLoading(false)
     setIsStreaming(false)
+    setResetPending(false)
   }
 
   const QUICK_PROMPTS = [
     '🗺️ What should I study next?',
+    '🗓️ Build me a 2-hour Deep Code study plan',
+    '⏱️ Set a 45m timer for Dart OOP',
+    '💻 Switch to Sprint 2 modules',
     '🏗️ Explain Clean Architecture simply',
-    '🐛 Help me debug a BLoC issue',
-    '⏱️ Build me a study schedule for today',
   ]
 
   return (
     <>
+      {/* ── Reset Confirmation Modal ── */}
+      <AnimatePresence>
+        {resetPending && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
+              className="glass-strong border border-red-400/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+              <h3 className="text-sm font-bold text-red-300 mb-2">⚠️ Confirm Progress Reset</h3>
+              <p className="text-xs text-white/50 mb-4">Sherif wants to reset all module progress to 0%. This cannot be undone. Are you sure?</p>
+              <div className="flex gap-2">
+                <button onClick={() => { useProgressStore.getState().resetProgress(); setResetPending(false) }}
+                  className="flex-1 py-2 rounded-xl bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold transition-all">
+                  Yes, Reset Everything
+                </button>
+                <button onClick={() => setResetPending(false)}
+                  className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 text-xs transition-all">
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Sherif FAB ── */}
       <motion.button
         initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1.2, type: 'spring', stiffness: 300 }}
@@ -172,10 +367,11 @@ export function GlobalSherifCopilot() {
         </div>
         <div className="flex flex-col leading-none">
           <span className="text-xs font-bold text-purple-200">Sherif AI</span>
-          <span className="text-[9px] text-white/30">Principal Mentor</span>
+          <span className="text-[9px] text-white/30">OS Controller</span>
         </div>
       </motion.button>
 
+      {/* ── Chat Window ── */}
       <AnimatePresence>
         {open && (
           <motion.div key="copilot"
@@ -183,6 +379,8 @@ export function GlobalSherifCopilot() {
             transition={{ type: 'spring', damping: 28, stiffness: 300 }}
             className="fixed bottom-36 right-6 z-50 glass-strong border border-white/[0.12] shadow-2xl rounded-2xl overflow-hidden flex flex-col w-[calc(100vw-48px)] sm:w-[420px] max-w-[95vw]"
             style={{ height: minimized ? 'auto' : 'min(600px, 85vh)' }}>
+
+            {/* Header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.07] shrink-0 bg-purple-500/[0.04]">
               <div className="relative shrink-0">
                 <span className="text-base">🤖</span>
@@ -190,7 +388,7 @@ export function GlobalSherifCopilot() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold text-purple-200 leading-none">Sherif</p>
-                <p className="text-[10px] text-purple-300/50 mt-0.5">Principal Technical Mentor · Global Co-Pilot</p>
+                <p className="text-[10px] text-purple-300/50 mt-0.5">Autonomous OS Controller · {stats.overallPercentage}% complete</p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {messages.length > 0 && (
@@ -212,13 +410,14 @@ export function GlobalSherifCopilot() {
 
             {!minimized && (
               <>
+                {/* Messages */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 min-h-0">
                   {messages.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full text-center gap-4 opacity-60 py-8">
                       <Bot className="w-10 h-10 text-purple-400" />
                       <div>
-                        <p className="text-sm text-white/50 font-medium">Ask Sherif anything</p>
-                        <p className="text-[11px] text-white/25 mt-1 max-w-[240px]">Architecture, debugging, career advice, study roadmap — no limits.</p>
+                        <p className="text-sm text-white/50 font-medium">Sherif — OS Controller</p>
+                        <p className="text-[11px] text-white/25 mt-1 max-w-[240px]">I can build study plans, set timers, switch views, mark progress, and navigate your board. Just ask.</p>
                       </div>
                       <div className="flex flex-col gap-1.5 w-full">
                         {QUICK_PROMPTS.map((q) => (
@@ -245,6 +444,7 @@ export function GlobalSherifCopilot() {
                   <div ref={endRef} />
                 </div>
 
+                {/* Input bar */}
                 <div className="shrink-0 border-t border-white/[0.07] p-3 bg-black/20">
                   <div className="flex items-end gap-2">
                     <textarea ref={textareaRef} value={input}
@@ -254,7 +454,7 @@ export function GlobalSherifCopilot() {
                         e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
                       }}
                       onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
-                      placeholder="Ask Sherif… (Enter to send)" rows={1} disabled={isLoading || isStreaming}
+                      placeholder="Ask Sherif or give a command…" rows={1} disabled={isLoading || isStreaming}
                       className="flex-1 rounded-xl px-3 py-2.5 resize-none scrollbar-none bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 transition-all disabled:opacity-40 leading-relaxed"
                       style={{ minHeight: '40px', maxHeight: '120px' }} />
                     <button onClick={() => sendMessage(input)} disabled={!input.trim() || isLoading || isStreaming}
@@ -263,7 +463,7 @@ export function GlobalSherifCopilot() {
                     </button>
                   </div>
                   <p className="text-[9px] text-white/15 mt-1.5 text-center">
-                    {stats.overallPercentage}% complete · {focusedTaskTitle ? `🍅 ${focusedTaskTitle}` : 'No active task'}
+                    {stats.overallPercentage}% complete · {focusedTaskTitle ? `🍅 ${focusedTaskTitle}` : 'No active task'} · Enter to send
                   </p>
                 </div>
               </>

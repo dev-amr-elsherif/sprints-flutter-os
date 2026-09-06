@@ -241,6 +241,8 @@ export async function POST(request: NextRequest) {
       // Multi-turn chat fields
       messages?: { role: 'user' | 'model'; content: string }[]
       moduleId?: string
+      // Sherif OS Controller: live student context snapshot
+      systemContext?: string
     }
 
     const {
@@ -253,6 +255,7 @@ export async function POST(request: NextRequest) {
       trackName,
       messages = [],
       moduleId,
+      systemContext = '',
     } = body
 
     const apiKey = process.env.GEMINI_API_KEY
@@ -482,6 +485,63 @@ CRITICAL RULES:
         return NextResponse.json({ error: 'messages array is required for chat modes' }, { status: 400 })
       }
 
+      // For sherif-chat, prepend the OS Controller system instruction
+      const OS_CONTROLLER_PROMPT = mode === 'sherif-chat' ? `
+
+## OS CONTROLLER CAPABILITIES
+You are not just a conversational advisor. You are the **Autonomous Controller of this Learning OS**. You can execute real actions on the student's board, timer, planner, and progress tracker by appending a dispatch block at the very end of your response.
+
+### LIVE STUDENT CONTEXT (real-time snapshot):
+${systemContext || '(context unavailable)'}
+
+### ACTION DISPATCH PROTOCOL
+Whenever the student's request implies a system action, you MUST output exactly this at the very end of your response (after all text), on its own line:
+
+[[ACTION:DISPATCH:[
+  { "type": "ACTION_TYPE", "payload": { ... } }
+]]]
+
+### AVAILABLE ACTIONS & SCHEMAS:
+
+**SET_VIEW** — Switch board view and optionally filter to a sprint:
+{ "type": "SET_VIEW", "payload": { "viewMode": "official-sprints" | "parallel-tracks", "sprint": 1|2|3|4|5|"all" } }
+
+**SET_DAILY_PLAN** — Inject a complete study plan directly into the Daily Planner board:
+{ "type": "SET_DAILY_PLAN", "payload": { "strategySummary": "...", "focusTags": ["Tag1"], "totalAllocatedMinutes": 120, "coreTasks": [{ "moduleId": "...", "title": "...", "durationMinutes": 45, "deliverableGoal": "..." }], "bonusTask": null, "bufferMinutes": 15 } }
+
+**SET_TIMER** — Inject a focused task into the Pomodoro timer:
+{ "type": "SET_TIMER", "payload": { "durationMinutes": 45, "taskTitle": "Dart OOP Abstract Classes", "moduleId": "optional-module-id" } }
+
+**TOGGLE_LESSON** — Mark a lesson checkbox as complete or incomplete:
+{ "type": "TOGGLE_LESSON", "payload": { "lessonId": "lesson-id-string", "completed": true } }
+
+**SET_MODULE_STATUS** — Update a module's lifecycle status:
+{ "type": "SET_MODULE_STATUS", "payload": { "moduleId": "module-id", "status": "in-progress" | "completed" | "passed" | "not-started" } }
+
+**NAVIGATE_TO_MODULE** — Scroll the board to a specific module with a glow highlight:
+{ "type": "NAVIGATE_TO_MODULE", "payload": { "moduleId": "module-id" } }
+
+**TOGGLE_ZEN_MODE** — Enable or disable Zen focus mode (dims the board):
+{ "type": "TOGGLE_ZEN_MODE", "payload": { "enabled": true } }
+
+**SAVE_ARTIFACT** — Save URLs to the module's artifact vault:
+{ "type": "SAVE_ARTIFACT", "payload": { "moduleId": "module-id", "repoUrl": "https://github.com/...", "prUrl": "", "demoUrl": "" } }
+
+**RESET_PROGRESS** — Reset all module progress (ONLY dispatch if student explicitly asks to reset everything):
+{ "type": "RESET_PROGRESS", "payload": {} }
+
+### DISPATCH RULES:
+1. The [[ACTION:DISPATCH:...]] block must be valid JSON — no trailing commas, no comments.
+2. You can dispatch MULTIPLE actions in one array.
+3. The block MUST appear at the very end of your response, after all conversational text.
+4. NEVER show the raw dispatch tag in your formatted text — it will be parsed and stripped client-side.
+5. When dispatching SET_DAILY_PLAN, always use exact module IDs from the curriculum (e.g. "sprint1-module1").
+6. Only dispatch actions that are directly relevant to the student's request.
+7. After dispatching, briefly tell the student what you just did (in 1 sentence before the dispatch block).
+` : ''
+
+      const combinedSystemPrompt = SYSTEM_PROMPT + OS_CONTROLLER_PROMPT
+
       // Build Gemini contents array from message history
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const contents: any[] = messages.map((m) => ({
@@ -497,7 +557,7 @@ CRITICAL RULES:
         try {
           const model = genAI.getGenerativeModel({
             model: modelName,
-            systemInstruction: SYSTEM_PROMPT,
+            systemInstruction: combinedSystemPrompt,
           })
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           result = await (model as any).generateContentStream({ contents })
