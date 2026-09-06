@@ -603,16 +603,20 @@ function InterviewPanel({ moduleId, moduleTitle }: { moduleId: string | null; mo
       </div>
 
       {round === 0 && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
-          <MessageSquare className="w-10 h-10 text-purple-400/50" />
-          <div>
-            <p className="text-sm text-white/50 max-w-xs">
-              Sherif will ask you <strong className="text-white/70">3 production-level questions</strong> tailored to <em className="text-purple-300">{moduleTitle || 'this module'}</em>.
-            </p>
-            <p className="text-[11px] text-white/25 mt-1">STAR method answers preferred</p>
+        <div className="shrink-0 rounded-2xl border border-purple-500/20 bg-purple-500/[0.04] p-4 space-y-3">
+          <div className="flex items-start gap-3">
+            <MessageSquare className="w-5 h-5 text-purple-400/60 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-white/70">3-Round STAR Mock Interview</p>
+              <p className="text-[11px] text-white/35 mt-0.5 leading-relaxed">
+                Sherif will ask you <strong className="text-white/55">3 production-level questions</strong> tailored to{' '}
+                <em className="text-purple-300">{moduleTitle || 'this module'}</em>.
+                Use the STAR method (Situation, Task, Action, Result) in your answers.
+              </p>
+            </div>
           </div>
           <button onClick={startInterview}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-500/80 hover:bg-purple-500 text-white text-sm font-semibold shadow-lg transition-all active:scale-95">
+            className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-purple-500/80 hover:bg-purple-500 text-white text-sm font-semibold shadow-lg transition-all active:scale-95">
             <Zap className="w-4 h-4" /> 🎯 Start Mock Interview
           </button>
         </div>
@@ -742,10 +746,12 @@ function AskSherifPanel({ moduleId, moduleTitle }: { moduleId: string | null; mo
       </div>
 
       {displayMessages.length === 0 && (
-        <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 opacity-50">
-          <HelpCircle className="w-10 h-10 text-purple-400" />
-          <p className="text-sm text-white/50 max-w-xs">Ask Sherif anything — architecture questions, debugging help, syllabus guidance, roadmap advice.</p>
-          <div className="flex flex-wrap gap-1.5 justify-center">
+        <div className="shrink-0 space-y-2.5">
+          <div className="flex items-start gap-3 px-3 py-3 rounded-xl bg-white/[0.025] border border-white/[0.06]">
+            <HelpCircle className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-white/45 leading-relaxed">Ask Sherif anything — architecture, debugging, syllabus guidance, or roadmap advice.</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
             {QUICK_PROMPTS.map((q) => (
               <button key={q} onClick={() => setUserInput(q)}
                 className="text-[10px] px-2.5 py-1 rounded-full border border-white/10 text-white/40 hover:text-white/70 hover:border-white/20 transition-all">

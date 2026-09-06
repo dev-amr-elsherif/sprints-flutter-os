@@ -216,8 +216,8 @@ export function PomodoroTimer() {
         )}
       </AnimatePresence>
 
-      {/* Floating timer widget */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-30 select-none">
+      {/* Minimized pill — anchored bottom-left to avoid Sherif FAB */}
+      <div className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 select-none">
         <AnimatePresence mode="wait">
           {isMinimized ? (
             /* ── Minimized Pill ── */
@@ -290,19 +290,30 @@ export function PomodoroTimer() {
               </button>
             </motion.div>
 
-          ) : (
-            /* ── Expanded Dial Card ── */
+          ) : null}
+        </AnimatePresence>
+      </div>
+
+      {/* Expanded Dial — centered modal (zero collision with any FAB) */}
+      <AnimatePresence>
+        {!isMinimized && (
+          <motion.div
+            key="expanded-modal-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4"
+            onClick={() => toggleMinimized(true)}
+          >
             <motion.div
-              key="expanded"
-              initial={{ scale: 0.9, opacity: 0, y: 10 }}
+              key="expanded-modal-card"
+              initial={{ scale: 0.93, opacity: 0, y: 12 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-              className={cn(
-                'glass-strong rounded-2xl border border-white/[0.10] shadow-2xl overflow-hidden',
-                isExpanded ? 'w-72' : 'w-56'
-              )}
-            >
+              exit={{ scale: 0.93, opacity: 0, y: 12 }}
+              transition={{ type: 'spring', damping: 26, stiffness: 340 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-sm rounded-3xl bg-zinc-950/95 border border-white/[0.10] shadow-2xl overflow-hidden">
               {/* Accent line */}
               <div className="h-[2px]" style={{ background: `linear-gradient(to right, ${phaseColor}80, transparent)` }} />
 
@@ -567,9 +578,9 @@ export function PomodoroTimer() {
                 )}
               </AnimatePresence>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   )
 }

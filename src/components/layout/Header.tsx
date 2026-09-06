@@ -1,6 +1,7 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { motion } from 'framer-motion'
 import {
   Download,
@@ -71,6 +72,7 @@ export function Header({
   onLock,
 }: HeaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   const handleExport = () => {
     const json = onExport()
@@ -95,6 +97,7 @@ export function Header({
   const doneCount = stats.completedModules + stats.passedModules
 
   return (
+    <>
     <header className="sticky top-0 z-30 glass border-b border-white/[0.06] backdrop-blur-xl">
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
 
@@ -195,11 +198,7 @@ export function Header({
               <span className="hidden sm:inline">Import</span>
             </button>
             <button
-              onClick={() => {
-                if (confirm('Reset ALL course progress to 0%?\n\nThis will clear every module status (including pre-passed modules) and all lesson checkboxes. This cannot be undone.')) {
-                  onHardReset()
-                }
-              }}
+              onClick={() => setShowResetConfirm(true)}
               title="Reset all progress to 0% — clears even pre-passed modules"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs text-white/30 hover:text-red-400 border border-white/[0.06] hover:border-red-500/30 hover:bg-red-500/5 transition-all"
             >
@@ -348,5 +347,16 @@ export function Header({
         </div>
       </div>
     </header>
+
+    <ConfirmModal
+      open={showResetConfirm}
+      title="Reset Course Progress?"
+      description="This will clear every module status (including pre-passed modules) and all lesson checkboxes."
+      confirmLabel="⚠️ Reset Everything"
+      cancelLabel="Cancel"
+      onConfirm={onHardReset}
+      onCancel={() => setShowResetConfirm(false)}
+    />
+  </>
   )
 }
