@@ -11,13 +11,13 @@ type ChimePhase = 'focus' | 'short-break' | 'long-break'
  */
 function playToneSequence(
   ctx: AudioContext,
-  notes: { freq: number; startAt: number; duration: number; peak: number }[]
+  notes: { freq: number; startAt: number; duration: number; peak: number; type?: OscillatorType }[]
 ) {
   for (const note of notes) {
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
 
-    osc.type = 'sine'
+    osc.type = note.type ?? 'sine'
     osc.frequency.value = note.freq
     osc.connect(gain)
     gain.connect(ctx.destination)
@@ -35,9 +35,9 @@ function playToneSequence(
 /**
  * Play a completion chime appropriate for the given session phase.
  *
- * Focus complete → uplifting 2-note ascending chime (D5 → A5)
- * Short break complete → triple alert (A4 → C5 → E5) — "get back to work"
- * Long break complete → same as short break but slightly warmer
+ * Focus complete  → uplifting 2-note ascending chime (D5 → A5) with soft harmonic layer
+ * Short break     → triple alert (A4 → C5 → E5) — "get back to work"
+ * Long break      → warmer triple (G4 → B4 → D5)
  */
 export function playSessionCompletedChime(phase: ChimePhase = 'focus'): void {
   if (typeof window === 'undefined') return
@@ -56,28 +56,35 @@ export function playSessionCompletedChime(phase: ChimePhase = 'focus'): void {
 
     if (phase === 'focus') {
       // Uplifting ascending 2-note chime: D5 (587Hz) → A5 (880Hz)
+      // Main tones at boosted gain + quiet octave harmonics for acoustic richness
       playToneSequence(ctx, [
-        { freq: 587.33, startAt: 0,    duration: 0.9, peak: 0.28 },
-        { freq: 880,    startAt: 0.28, duration: 1.2, peak: 0.22 },
+        // Primary D5
+        { freq: 587.33,  startAt: 0,    duration: 0.95, peak: 0.50 },
+        // Soft octave harmonic D6 — adds body without harshness
+        { freq: 1174.66, startAt: 0,    duration: 0.75, peak: 0.14 },
+        // Primary A5
+        { freq: 880,     startAt: 0.30, duration: 1.25, peak: 0.48 },
+        // Soft harmonic A6 — shimmer layer
+        { freq: 1760,    startAt: 0.30, duration: 0.90, peak: 0.10 },
       ])
     } else if (phase === 'short-break') {
-      // Triple alert: A4 → C5 → E5 (time to get back to work)
+      // Triple alert: A4 → C5 → E5
       playToneSequence(ctx, [
-        { freq: 440,    startAt: 0,    duration: 0.4, peak: 0.22 },
-        { freq: 523.25, startAt: 0.18, duration: 0.4, peak: 0.22 },
-        { freq: 659.25, startAt: 0.36, duration: 0.7, peak: 0.20 },
+        { freq: 440,    startAt: 0,    duration: 0.40, peak: 0.46 },
+        { freq: 523.25, startAt: 0.18, duration: 0.40, peak: 0.46 },
+        { freq: 659.25, startAt: 0.36, duration: 0.75, peak: 0.44 },
       ])
     } else {
       // Long break complete — warmer triple: G4 → B4 → D5
       playToneSequence(ctx, [
-        { freq: 392,    startAt: 0,    duration: 0.45, peak: 0.20 },
-        { freq: 493.88, startAt: 0.20, duration: 0.45, peak: 0.20 },
-        { freq: 587.33, startAt: 0.40, duration: 0.90, peak: 0.18 },
+        { freq: 392,    startAt: 0,    duration: 0.48, peak: 0.44 },
+        { freq: 493.88, startAt: 0.22, duration: 0.48, peak: 0.44 },
+        { freq: 587.33, startAt: 0.44, duration: 0.95, peak: 0.42 },
       ])
     }
 
     // Auto-close after chime finishes
-    setTimeout(() => ctx.close().catch(() => null), 2500)
+    setTimeout(() => ctx.close().catch(() => null), 2800)
   } catch {
     /* noop — autoplay blocked or AudioContext not supported */
   }
@@ -95,8 +102,8 @@ export function playTestChime(): void {
     const ctx = new AudioCtx() as AudioContext
     if (ctx.state === 'suspended') ctx.resume().catch(() => null)
     playToneSequence(ctx, [
-      { freq: 523.25, startAt: 0,    duration: 0.3, peak: 0.2 },
-      { freq: 659.25, startAt: 0.15, duration: 0.5, peak: 0.18 },
+      { freq: 523.25, startAt: 0,    duration: 0.30, peak: 0.46 },
+      { freq: 659.25, startAt: 0.15, duration: 0.55, peak: 0.44 },
     ])
     setTimeout(() => ctx.close().catch(() => null), 1200)
   } catch { /* noop */ }

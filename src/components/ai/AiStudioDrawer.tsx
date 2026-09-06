@@ -898,26 +898,25 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                   {(['task-checker', 'linkedin'] as const).map((tabId) => {
                     const tab = TABS_CONFIG.find((t) => t.id === tabId)!
                     return (
-                      <Tabs.Content key={tabId} value={tabId} className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
-                        <div className="p-5 space-y-4">
-                          {/* ── 1. Scope selector (LinkedIn only) ── */}
+                      <Tabs.Content key={tabId} value={tabId} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+
+                        {/* ── ZONE 1: PINNED INPUTS — always visible, never scrolls ── */}
+                        <div className="shrink-0 p-5 pb-3 space-y-3.5 border-b border-white/[0.05] bg-zinc-950/40">
                           {tabId === 'linkedin' && (
                             <LIScope scope={linkedInScope} onScopeChange={(s) => { setLinkedInScope(s); handleClear() }}
                               selectedSprint={selectedSprint} onSprintChange={(s) => { setSelectedSprint(s); handleClear() }}
                               selectedTrack={selectedTrack} onTrackChange={(t) => { setSelectedTrack(t); handleClear() }} />
                           )}
 
-                          {/* ── 2. Textarea ── */}
                           <div>
                             <label className="block text-xs font-medium text-white/40 mb-2 uppercase tracking-wider">
                               {tabId === 'task-checker' ? 'Your Submission' : 'Personal Context (optional)'}
                             </label>
                             <textarea value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder={tab.placeholder}
-                              rows={tabId === 'task-checker' ? 6 : 3}
+                              rows={tabId === 'task-checker' ? 5 : 3}
                               className="w-full rounded-xl px-4 py-3 bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 focus:bg-white/[0.06] transition-all resize-none font-mono scrollbar-none" />
                           </div>
 
-                          {/* ── 3. Action bar ── */}
                           <div className="flex items-center gap-2">
                             <button onClick={handleRun} disabled={isLoading || isStreaming || !canRun}
                               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-purple-500/80 hover:bg-purple-500 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg">
@@ -931,10 +930,12 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                             )}
                             {isMock && <span className="text-[10px] text-amber-400/60 flex items-center gap-1 ml-auto"><FlaskConical className="w-3 h-3" /> Mock mode</span>}
                           </div>
+                        </div>
 
-                          {/* ── 4. Results (appear directly below, no void) ── */}
-                          {(response || isLoading || error) && (
-                            <div className="border-t border-white/[0.06] pt-4 space-y-3">
+                        {/* ── ZONE 2: SCROLLABLE OUTPUT — only this area scrolls ── */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0">
+                          {(response || isLoading || error) ? (
+                            <div className="p-5 space-y-4">
                               {error ? (
                                 <div className="rounded-xl p-4 bg-red-500/[0.05] border border-red-400/20">
                                   <p className="text-sm text-red-400">{error}</p>
@@ -956,16 +957,16 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                                 </div>
                               )}
                             </div>
-                          )}
-
-                          {/* ── 5. Empty state hint (compact, no void) ── */}
-                          {!response && !isLoading && !error && (
-                            <div className="flex items-start gap-2.5 opacity-25 pt-1">
-                              <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-                              <p className="text-xs text-white/50 leading-relaxed">
-                                {tabId === 'task-checker' && 'Paste your code, SQL schema, Dockerfile, or network config — Sherif will give you a structured Senior Architect rubric review.'}
-                                {tabId === 'linkedin' && 'Choose scope, add context, and generate a high-impact post for Module, Sprint, or Track mastery.'}
-                              </p>
+                          ) : (
+                            <div className="h-full flex items-center justify-center p-6 text-center">
+                              <div className="flex flex-col items-center gap-2 opacity-20">
+                                <Sparkles className="w-6 h-6 text-purple-400" />
+                                <p className="text-xs text-white/50 leading-relaxed max-w-[200px]">
+                                  {tabId === 'task-checker'
+                                    ? 'Paste code above and click Review with Sherif'
+                                    : 'Configure scope above and click Generate Post'}
+                                </p>
+                              </div>
                             </div>
                           )}
                         </div>

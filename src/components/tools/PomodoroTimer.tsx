@@ -217,7 +217,7 @@ export function PomodoroTimer() {
       </AnimatePresence>
 
       {/* Minimized pill — anchored bottom-left to avoid Sherif FAB */}
-      <div className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 select-none">
+      <div className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-30 select-none">
         <AnimatePresence mode="wait">
           {isMinimized ? (
             /* ── Minimized Pill ── */

@@ -461,7 +461,7 @@ export function GlobalSherifCopilot() {
         transition={{ delay: 1.2, type: 'spring', stiffness: 300 }}
         onClick={() => setOpen(true)}
         className={cn(
-          'fixed bottom-20 sm:bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 pl-2.5 pr-3.5 py-2 rounded-2xl glass-strong border shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95',
+          'fixed bottom-5 sm:bottom-6 right-5 sm:right-6 z-30 flex items-center gap-2 pl-2.5 pr-3.5 py-2 rounded-2xl glass-strong border shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95',
           open ? 'border-purple-400/40 bg-purple-500/10' : 'border-white/[0.09] hover:border-purple-400/30'
         )}
         title="Open Sherif AI Co-Pilot"
