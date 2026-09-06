@@ -172,6 +172,7 @@ export type SherifActionType =
   | 'TOGGLE_ZEN_MODE'
   | 'SAVE_ARTIFACT'
   | 'RESET_PROGRESS'
+  | 'TRIGGER_PLAN_GEN'
 
 export type SherifAction =
   | { type: 'SET_VIEW'; payload: { viewMode: ViewMode; sprint?: SprintNumber | 'all' } }
@@ -183,4 +184,6 @@ export type SherifAction =
   | { type: 'TOGGLE_ZEN_MODE'; payload: { enabled: boolean } }
   | { type: 'SAVE_ARTIFACT'; payload: { moduleId: string; repoUrl?: string; prUrl?: string; demoUrl?: string } }
   | { type: 'RESET_PROGRESS'; payload: Record<string, never> }
+  | { type: 'TRIGGER_PLAN_GEN'; payload: { hours: number; energy: 'deep' | 'balanced' | 'micro' } }
+
 
