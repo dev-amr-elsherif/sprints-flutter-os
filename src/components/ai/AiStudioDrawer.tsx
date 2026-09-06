@@ -7,7 +7,7 @@ import * as Tabs from '@radix-ui/react-tabs'
 import {
   X, Sparkles, Code2, MessageSquare, Linkedin, Send, RotateCcw,
   Bot, FlaskConical, Clipboard, Check, Wifi, WifiOff, RefreshCw,
-  LayoutGrid, ListOrdered, Timer, Play, HelpCircle, Zap,
+  LayoutGrid, ListOrdered, Timer, Play, Zap, HelpCircle,
 } from 'lucide-react'
 import type { AiMode, TrackType } from '@/lib/types'
 import { useAiStream, ChatMessage } from './useAiStream'
@@ -16,7 +16,7 @@ import { TRACK_META, SPRINT_META, cn } from '@/lib/utils'
 import { useProgressStore } from '@/store/progressStore'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-type StudioMode = AiMode | 'sherif-chat' | 'interview-simulator'
+type StudioMode = AiMode | 'interview-simulator'
 
 interface AiStudioDrawerProps {
   open: boolean
@@ -836,7 +836,6 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
   const TABS_CONFIG = [
     { id: 'task-checker' as StudioMode, label: 'Task Review', icon: <Code2 className="w-3.5 h-3.5" />, placeholder: 'Paste your code, schema, SQL query, Dockerfile, or written work here for AI rubric-based review...' },
     { id: 'interview' as StudioMode, label: 'Mock Interview', icon: <MessageSquare className="w-3.5 h-3.5" />, placeholder: '' },
-    { id: 'sherif-chat' as StudioMode, label: 'Ask Sherif', icon: <HelpCircle className="w-3.5 h-3.5" />, placeholder: '' },
     { id: 'linkedin' as StudioMode, label: 'LinkedIn Post', icon: <Linkedin className="w-3.5 h-3.5" />, placeholder: 'Optional: What did you build? What surprised you? Any challenges?' },
   ]
 
@@ -888,82 +887,84 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                   <Tabs.Content value="interview" className="flex-1 flex flex-col min-h-0 p-5 overflow-hidden">
                     <InterviewPanel moduleId={moduleId} moduleTitle={moduleTitle} />
                   </Tabs.Content>
-                  <Tabs.Content value="sherif-chat" className="flex-1 flex flex-col min-h-0 p-5 overflow-hidden">
-                    <AskSherifPanel moduleId={moduleId} moduleTitle={moduleTitle} />
-                  </Tabs.Content>
 
-                  {/* Single-turn tabs */}
+                  {/* Single-turn tabs — strict flex-col, no overflow-y on container; result scrolls inside */}
                   {(['task-checker', 'linkedin'] as const).map((tabId) => {
                     const tab = TABS_CONFIG.find((t) => t.id === tabId)!
                     return (
-                      <Tabs.Content key={tabId} value={tabId} className="flex-1 flex flex-col gap-3 p-5 overflow-y-auto scrollbar-none custom-scrollbar">
-                        {tabId === 'linkedin' && (
-                          <LIScope scope={linkedInScope} onScopeChange={(s) => { setLinkedInScope(s); handleClear() }}
-                            selectedSprint={selectedSprint} onSprintChange={(s) => { setSelectedSprint(s); handleClear() }}
-                            selectedTrack={selectedTrack} onTrackChange={(t) => { setSelectedTrack(t); handleClear() }} />
-                        )}
-                        <div className="shrink-0">
-                          <label className="block text-xs font-medium text-white/40 mb-2 uppercase tracking-wider">
-                            {tabId === 'task-checker' ? 'Your Submission' : 'Personal Context (optional)'}
-                          </label>
-                          <textarea value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder={tab.placeholder}
-                            rows={tabId === 'task-checker' ? 6 : 3}
-                            className="w-full rounded-xl px-4 py-3 bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 focus:bg-white/[0.06] transition-all resize-none font-mono scrollbar-none" />
-                        </div>
-
-                        {/* Action bar */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button onClick={handleRun} disabled={isLoading || isStreaming || !canRun}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-purple-500/80 hover:bg-purple-500 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg">
-                            {isLoading || isStreaming ? <Bot className="w-4 h-4 animate-pulse" /> : <Send className="w-4 h-4" />}
-                            {isLoading ? 'Thinking...' : isStreaming ? 'Streaming...' : tabId === 'task-checker' ? 'Review with Sherif' : 'Generate Post'}
-                          </button>
-                          {/* Generic copy + clear for task-checker only; linkedin has its own utils */}
-                          {response && tabId === 'task-checker' && (
-                            <button onClick={handleClear} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white/50 hover:text-white/80 hover:bg-white/5 transition-all">
-                              <RotateCcw className="w-3.5 h-3.5" /> Clear
-                            </button>
+                      <Tabs.Content key={tabId} value={tabId} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                        {/* ── Top: fixed controls (scope, textarea, action bar) ── */}
+                        <div className="shrink-0 flex flex-col gap-3 p-5 pb-3">
+                          {tabId === 'linkedin' && (
+                            <LIScope scope={linkedInScope} onScopeChange={(s) => { setLinkedInScope(s); handleClear() }}
+                              selectedSprint={selectedSprint} onSprintChange={(s) => { setSelectedSprint(s); handleClear() }}
+                              selectedTrack={selectedTrack} onTrackChange={(t) => { setSelectedTrack(t); handleClear() }} />
                           )}
-                          {isMock && <span className="text-[10px] text-amber-400/60 flex items-center gap-1 ml-auto"><FlaskConical className="w-3 h-3" /> Mock mode</span>}
+                          <div>
+                            <label className="block text-xs font-medium text-white/40 mb-2 uppercase tracking-wider">
+                              {tabId === 'task-checker' ? 'Your Submission' : 'Personal Context (optional)'}
+                            </label>
+                            <textarea value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder={tab.placeholder}
+                              rows={tabId === 'task-checker' ? 5 : 3}
+                              className="w-full rounded-xl px-4 py-3 bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 focus:bg-white/[0.06] transition-all resize-none font-mono scrollbar-none" />
+                          </div>
+
+                          {/* Action bar */}
+                          <div className="flex items-center gap-2">
+                            <button onClick={handleRun} disabled={isLoading || isStreaming || !canRun}
+                              className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-purple-500/80 hover:bg-purple-500 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg">
+                              {isLoading || isStreaming ? <Bot className="w-4 h-4 animate-pulse" /> : <Send className="w-4 h-4" />}
+                              {isLoading ? 'Thinking...' : isStreaming ? 'Streaming...' : tabId === 'task-checker' ? 'Review with Sherif' : 'Generate Post'}
+                            </button>
+                            {response && tabId === 'task-checker' && (
+                              <button onClick={handleClear} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white/50 hover:text-white/80 hover:bg-white/5 transition-all">
+                                <RotateCcw className="w-3.5 h-3.5" /> Clear
+                              </button>
+                            )}
+                            {isMock && <span className="text-[10px] text-amber-400/60 flex items-center gap-1 ml-auto"><FlaskConical className="w-3 h-3" /> Mock mode</span>}
+                          </div>
                         </div>
 
-                        {/* Result area */}
-                        {(response || isLoading || error) && (
-                          <div className="flex-1 min-h-0">
-                            {error ? (
-                              <div className="rounded-xl p-4 bg-red-500/[0.05] border border-red-400/20">
-                                <p className="text-sm text-red-400">{error}</p>
-                              </div>
-                            ) : isLoading ? (
-                              <div className="flex items-center gap-2 text-sm text-white/30 p-4">
-                                <Bot className="w-4 h-4 animate-pulse text-purple-400" /> Sherif is preparing your review…
-                              </div>
-                            ) : tabId === 'task-checker' ? (
-                              <div className={cn('rounded-xl p-4 bg-white/[0.02] border border-white/[0.05] overflow-y-auto custom-scrollbar', isStreaming && 'typing-cursor')}>
-                                <RubricRenderer text={response} isStreaming={isStreaming} />
-                              </div>
-                            ) : (
-                              /* LinkedIn result */
-                              <div className="space-y-0">
-                                <div className={cn('rounded-xl p-4 bg-white/[0.02] border border-white/[0.05] overflow-y-auto custom-scrollbar max-h-72', isStreaming && 'typing-cursor')}>
-                                  <MD text={response} />
+                        {/* ── Bottom: scrollable result area ── */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar px-5 pb-5 min-h-0">
+                          {/* Result area */}
+                          {(response || isLoading || error) && (
+                            <>
+                              {error ? (
+                                <div className="rounded-xl p-4 bg-red-500/[0.05] border border-red-400/20">
+                                  <p className="text-sm text-red-400">{error}</p>
                                 </div>
-                                {!isStreaming && <LinkedInPostUtils text={response} onClear={handleClear} />}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                              ) : isLoading ? (
+                                <div className="flex items-center gap-2 text-sm text-white/30 py-6">
+                                  <Bot className="w-4 h-4 animate-pulse text-purple-400" /> Sherif is preparing your review…
+                                </div>
+                              ) : tabId === 'task-checker' ? (
+                                <div className={cn('rounded-xl p-4 bg-white/[0.02] border border-white/[0.05]', isStreaming && 'typing-cursor')}>
+                                  <RubricRenderer text={response} isStreaming={isStreaming} />
+                                </div>
+                              ) : (
+                                /* LinkedIn result */
+                                <div className="space-y-0">
+                                  <div className={cn('rounded-xl p-4 bg-white/[0.02] border border-white/[0.05]', isStreaming && 'typing-cursor')}>
+                                    <MD text={response} />
+                                  </div>
+                                  {!isStreaming && <LinkedInPostUtils text={response} onClear={handleClear} />}
+                                </div>
+                              )}
+                            </>
+                          )}
 
-                        {/* Empty state */}
-                        {!response && !isLoading && !error && (
-                          <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 opacity-30">
-                            <Sparkles className="w-10 h-10 text-purple-400" />
-                            <p className="text-sm text-white/50 max-w-xs">
-                              {tabId === 'task-checker' && 'Paste your code, SQL schema, Dockerfile, or network config — Sherif will give you a structured Senior Architect rubric review.'}
-                              {tabId === 'linkedin' && 'Choose scope, add context, and generate a high-impact post for Module, Sprint, or Track mastery.'}
-                            </p>
-                          </div>
-                        )}
+                          {/* Empty state */}
+                          {!response && !isLoading && !error && (
+                            <div className="flex flex-col items-center justify-center text-center gap-3 opacity-30 py-12">
+                              <Sparkles className="w-10 h-10 text-purple-400" />
+                              <p className="text-sm text-white/50 max-w-xs">
+                                {tabId === 'task-checker' && 'Paste your code, SQL schema, Dockerfile, or network config — Sherif will give you a structured Senior Architect rubric review.'}
+                                {tabId === 'linkedin' && 'Choose scope, add context, and generate a high-impact post for Module, Sprint, or Track mastery.'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </Tabs.Content>
                     )
                   })}

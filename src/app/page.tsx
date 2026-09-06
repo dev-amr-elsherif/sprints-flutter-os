@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -15,6 +15,7 @@ import { SprintLane } from '@/components/board/SprintLane'
 import { EnergyFilterBanner } from '@/components/board/EnergyFilterBanner'
 import { AiStudioDrawer } from '@/components/ai/AiStudioDrawer'
 import { AiDailyPlanner } from '@/components/ai/AiDailyPlanner'
+import { GlobalSherifCopilot } from '@/components/ai/GlobalSherifCopilot'
 import { PomodoroTimer } from '@/components/tools/PomodoroTimer'
 import { CapsuleQuickDump } from '@/components/tools/CapsuleQuickDump'
 import { AuthGate } from '@/components/auth/AuthGate'
@@ -78,7 +79,7 @@ export default function HomePage() {
 
   return (
     <AuthGate>
-      <div className="min-h-screen">
+      <div className="min-h-[100dvh]">
       {/* ── Header ── */}
       <Header
         stats={stats}
@@ -97,7 +98,7 @@ export default function HomePage() {
       />
 
       {/* ── Main ── */}
-      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+      <main className="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-5">
 
         {/* ── Stats Row ── */}
         <motion.div
@@ -190,11 +191,11 @@ export default function HomePage() {
 
             {/* In-page sprint tabs when in official-sprints view */}
             {viewMode === 'official-sprints' && (
-              <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] shrink-0">
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] shrink-0 overflow-x-auto scrollbar-none">
                 <button
                   onClick={() => setActiveSprint('all')}
                   className={cn(
-                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-all select-none',
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-all select-none whitespace-nowrap',
                     (!activeSprint || activeSprint === 'all')
                       ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30 shadow-sm'
                       : 'text-white/40 hover:text-white/70 hover:bg-white/5 border border-transparent'
@@ -209,7 +210,7 @@ export default function HomePage() {
                       key={s.number}
                       onClick={() => setActiveSprint(s.number)}
                       className={cn(
-                        'px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition-all select-none',
+                        'px-2.5 py-1 rounded-lg text-xs font-mono font-medium transition-all select-none whitespace-nowrap',
                         isActive
                           ? 'bg-white/15 text-white border border-white/20 shadow-sm'
                           : 'text-white/40 hover:text-white/70 hover:bg-white/5 border border-transparent'
@@ -342,9 +343,13 @@ export default function HomePage() {
         <span className="text-xs font-medium hidden sm:inline">Capsule</span>
       </motion.button>
 
+      {/* ── Global Sherif AI Co-Pilot ── */}
+      <GlobalSherifCopilot />
+
       {/* ── Pomodoro Timer (fixed bottom-right) ── */}
       <PomodoroTimer />
     </div>
   </AuthGate>
   )
 }
+

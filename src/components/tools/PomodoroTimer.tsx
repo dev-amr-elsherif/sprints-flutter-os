@@ -157,13 +157,18 @@ export function PomodoroTimer() {
 
   // ── Custom duration input ─────────────────────────────────────────────
   const applyCustom = useCallback(() => {
-    const n = parseInt(customInput)
+    const n = parseInt(customInput, 10)
     if (!isNaN(n) && n >= 1 && n <= 180) {
       setSelectedMinutes(n)
       reset(n)
     }
     setEditingCustom(false)
   }, [customInput, reset])
+
+  const openCustomEdit = useCallback(() => {
+    setCustomInput(String(selectedMinutes))
+    setEditingCustom(true)
+  }, [selectedMinutes])
 
   // ── Derived display values ────────────────────────────────────────────
   const mins = Math.floor(seconds / 60)
@@ -384,7 +389,7 @@ export function PomodoroTimer() {
                   {/* Center: clickable time display or custom input */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
                     {editingCustom ? (
-                      <div className="flex flex-col items-center gap-1">
+                      <div className="flex flex-col items-center gap-1.5 px-1">
                         <input
                           type="number"
                           min={1}
@@ -396,24 +401,27 @@ export function PomodoroTimer() {
                             if (e.key === 'Enter') applyCustom()
                             if (e.key === 'Escape') setEditingCustom(false)
                           }}
-                          onBlur={applyCustom}
-                          className="w-14 text-center bg-transparent text-xl font-bold font-mono text-white focus:outline-none border-b border-white/30"
+                          className="w-14 text-center bg-transparent text-xl font-bold font-mono text-white focus:outline-none border-b-2 border-cyan-400/60"
                           placeholder="min"
                         />
-                        <span className="text-[9px] text-white/30">1–180 min</span>
+                        <div className="flex gap-1">
+                          <button
+                            onMouseDown={(e) => { e.preventDefault(); applyCustom() }}
+                            className="text-[9px] px-2 py-0.5 rounded border border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/20 transition-all font-semibold"
+                          >✓ Set</button>
+                          <button
+                            onMouseDown={(e) => { e.preventDefault(); setEditingCustom(false) }}
+                            className="text-[9px] px-2 py-0.5 rounded border border-white/10 text-white/30 hover:bg-white/5 transition-all"
+                          >✕</button>
+                        </div>
                       </div>
                     ) : (
                       <button
-                        onClick={() => {
-                          if (timerState === 'idle' || timerState === 'paused') {
-                            setCustomInput(String(selectedMinutes))
-                            setEditingCustom(true)
-                          }
-                        }}
-                        title={timerState === 'idle' || timerState === 'paused' ? 'Click to set custom duration' : undefined}
-                        className={cn('flex flex-col items-center gap-0.5', (timerState === 'idle' || timerState === 'paused') && 'cursor-text hover:opacity-80')}
+                        onClick={openCustomEdit}
+                        title="Click to set custom duration"
+                        className="flex flex-col items-center gap-0.5 group cursor-pointer hover:opacity-80 transition-opacity"
                       >
-                        <span className="text-2xl font-bold font-mono text-white tabular-nums tracking-tight">
+                        <span className="text-2xl font-bold font-mono text-white tabular-nums tracking-tight group-hover:text-cyan-200 transition-colors">
                           {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
                         </span>
                         <span className="text-[9px] text-white/25 font-mono uppercase">
@@ -506,26 +514,23 @@ export function PomodoroTimer() {
                           ))}
                           {/* Custom preset button */}
                           <button
-                            onClick={() => {
-                              setCustomInput(String(selectedMinutes))
-                              setEditingCustom(true)
-                            }}
+                            onClick={openCustomEdit}
                             className={cn(
                               'flex-1 py-1.5 rounded-lg text-xs font-mono border transition-all',
                               editingCustom
-                                ? 'text-cyan-300 border-cyan-400/30 bg-cyan-500/10'
-                                : 'text-white/30 border-white/[0.06] hover:text-white/60 hover:border-cyan-400/20'
+                                ? 'text-cyan-300 border-cyan-400/40 bg-cyan-500/15 shadow-[0_0_8px_rgba(6,182,212,0.2)]'
+                                : 'text-white/40 border-white/[0.08] hover:text-cyan-300 hover:border-cyan-400/30 hover:bg-cyan-500/[0.06]'
                             )}
                             title="Set custom duration (1–180 min)"
                           >
-                            ✎
+                            ✎ custom
                           </button>
                         </div>
 
                         {/* Custom inline editor in expanded panel */}
                         {editingCustom && (
-                          <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-cyan-400/20">
-                            <span className="text-[10px] text-white/30">min:</span>
+                          <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded-lg bg-cyan-500/[0.06] border border-cyan-400/25">
+                            <span className="text-[10px] text-cyan-300/50 shrink-0">min:</span>
                             <input
                               type="number"
                               min={1}
@@ -540,7 +545,14 @@ export function PomodoroTimer() {
                               className="flex-1 bg-transparent text-sm font-mono text-cyan-300 focus:outline-none"
                               placeholder="e.g. 45"
                             />
-                            <button onClick={applyCustom} className="text-[10px] text-cyan-300 hover:text-white px-1.5 py-0.5 rounded border border-cyan-400/30 hover:border-cyan-300 transition-all">✓</button>
+                            <button
+                              onMouseDown={(e) => { e.preventDefault(); applyCustom() }}
+                              className="text-[10px] text-cyan-300 hover:text-white px-2 py-0.5 rounded border border-cyan-400/35 hover:border-cyan-300 hover:bg-cyan-500/20 transition-all font-semibold"
+                            >✓ Set</button>
+                            <button
+                              onMouseDown={(e) => { e.preventDefault(); setEditingCustom(false) }}
+                              className="text-[10px] text-white/25 hover:text-white/50 px-1.5 py-0.5 rounded border border-white/10 transition-all"
+                            >✕</button>
                           </div>
                         )}
                       </div>
