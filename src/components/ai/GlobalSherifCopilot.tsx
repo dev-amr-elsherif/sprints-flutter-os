@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Send, Bot, RotateCcw, Minus, ChevronDown, Zap } from 'lucide-react'
+import { X, Send, Bot, RotateCcw, Zap, Cpu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProgressStore } from '@/store/progressStore'
 import { computeStats, getEffectiveStatus } from '@/lib/utils'
@@ -13,26 +13,62 @@ interface ChatMessage {
   id: string
   role: 'user' | 'sherif'
   text: string
-  executedActions?: string[] // Labels of executed actions for receipt pill
+  executedActions?: string[]
 }
 
-// ── Regex to parse the full ACTION:DISPATCH block (greedy, multi-line) ──
+// ── Dispatch block regex — matches [[ACTION:DISPATCH:...]] greedy, single-line or multi-line ──
 const DISPATCH_RE = /\[\[ACTION:DISPATCH:([\s\S]*?)\]\]/
 
+// ── Intent safety-net patterns — fire when LLM claims an action in text without dispatch block ──
+const TIMER_CLAIM_RE = /(?:set|locked|primed|started).*?(?:pomodoro|timer).*?(\d+)[-\s]?(?:minute|min|m).*?(?:for|on)\s+([^.\n,!?]+)/i
+const TIMER_CLAIM_RE2 = /(\d+)[-\s]?(?:minute|min|m).*?(?:deep work|session|timer|pomodoro).*?(?:for|on)\s+([^.\n,!?]+)/i
+
 function stripDispatch(text: string): string {
-  return text.replace(DISPATCH_RE, '').trim()
+  return text.replace(DISPATCH_RE, '').replace(/\n{3,}/g, '\n\n').trim()
+}
+
+/** Attempt to clean + parse JSON from a dispatch block match */
+function safeParseActions(raw: string): SherifAction[] {
+  // Step 1: trim whitespace
+  let cleaned = raw.trim()
+  // Step 2: remove trailing commas before ] or }
+  cleaned = cleaned.replace(/,\s*([}\]])/g, '$1')
+  // Step 3: attempt parse
+  try {
+    const parsed = JSON.parse(cleaned)
+    if (Array.isArray(parsed)) return parsed as SherifAction[]
+    return []
+  } catch (e1) {
+    // Step 4: try wrapping in array if it looks like a single object
+    try {
+      if (cleaned.trimStart().startsWith('{')) {
+        const arr = JSON.parse(`[${cleaned}]`)
+        if (Array.isArray(arr)) return arr as SherifAction[]
+      }
+    } catch { /* ignore */ }
+    console.warn('[Sherif Parser] Could not parse dispatch JSON:', e1, 'Raw:', cleaned.slice(0, 200))
+    return []
+  }
 }
 
 function parseActions(text: string): SherifAction[] {
   const match = text.match(DISPATCH_RE)
   if (!match) return []
-  try {
-    const raw = JSON.parse(match[1].trim())
-    if (!Array.isArray(raw)) return []
-    return raw as SherifAction[]
-  } catch {
-    return []
-  }
+  return safeParseActions(match[1])
+}
+
+/** Intent safety net: if LLM claims setting a timer in text but didn't dispatch, synthesize the action */
+function extractFallbackTimerAction(text: string, dispatchedActions: SherifAction[]): SherifAction | null {
+  // Already dispatched a timer? No need for fallback.
+  if (dispatchedActions.some((a) => a.type === 'SET_TIMER')) return null
+  // Try to extract from text claims
+  const m = text.match(TIMER_CLAIM_RE) || text.match(TIMER_CLAIM_RE2)
+  if (!m) return null
+  const mins = parseInt(m[1] || m[2] || '0', 10)
+  const rawTitle = (m[2] || m[1] || '').trim().replace(/[.!?]+$/, '').slice(0, 60)
+  if (!mins || mins < 1 || mins > 180 || !rawTitle) return null
+  console.log('[Sherif Safety Net] Synthesizing SET_TIMER fallback:', mins, rawTitle)
+  return { type: 'SET_TIMER', payload: { durationMinutes: mins, taskTitle: rawTitle } }
 }
 
 function actionLabel(action: SherifAction): string {
@@ -50,13 +86,13 @@ function actionLabel(action: SherifAction): string {
   }
 }
 
-// ── Execute a list of Sherif actions against the Zustand store + DOM ──
-function executeActions(actions: SherifAction[], confirmReset: () => boolean): string[] {
+function executeActions(actions: SherifAction[]): string[] {
   const store = useProgressStore.getState()
   const labels: string[] = []
 
   for (const action of actions) {
     try {
+      console.log('⚡ [Sherif Dispatcher] Executing action:', action)
       switch (action.type) {
         case 'SET_VIEW': {
           store.setViewMode(action.payload.viewMode)
@@ -64,22 +100,24 @@ function executeActions(actions: SherifAction[], confirmReset: () => boolean): s
           break
         }
         case 'SET_DAILY_PLAN': {
-          // Validate it has coreTasks before committing
           const plan = action.payload as DailyPlanSchedule
           if (plan && Array.isArray(plan.coreTasks)) {
             store.setActiveDailyPlan(plan)
+            console.log('⚡ [Sherif Dispatcher] Daily plan committed:', plan.coreTasks.length, 'tasks')
+          } else {
+            console.warn('[Sherif Dispatcher] SET_DAILY_PLAN payload missing coreTasks:', plan)
           }
           break
         }
         case 'SET_TIMER': {
-          store.setFocusedTask(action.payload.taskTitle, action.payload.durationMinutes, action.payload.moduleId)
+          const { taskTitle, durationMinutes, moduleId } = action.payload
+          store.setFocusedTask(taskTitle, durationMinutes, moduleId)
+          console.log('⚡ [Sherif Dispatcher] Timer set:', durationMinutes, 'min for', taskTitle)
           break
         }
         case 'TOGGLE_LESSON': {
           const current = store.lessonStatuses[action.payload.lessonId] === true
-          if (current !== action.payload.completed) {
-            store.toggleLesson(action.payload.lessonId)
-          }
+          if (current !== action.payload.completed) store.toggleLesson(action.payload.lessonId)
           break
         }
         case 'SET_MODULE_STATUS': {
@@ -109,14 +147,10 @@ function executeActions(actions: SherifAction[], confirmReset: () => boolean): s
           })
           break
         }
-        case 'RESET_PROGRESS': {
-          if (confirmReset()) store.resetProgress()
-          break
-        }
       }
       labels.push(actionLabel(action))
     } catch (e) {
-      console.warn('[Sherif OS] Action failed:', action, e)
+      console.warn('[Sherif Dispatcher] Action failed:', action, e)
     }
   }
   return labels
@@ -127,7 +161,8 @@ function MiniMD({ text }: { text: string }) {
     .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white/90 font-semibold">$1</strong>')
     .replace(/\*(.+?)\*/g, '<em class="text-white/70">$1</em>')
     .replace(/`([^`]+)`/g, '<code class="bg-white/10 text-cyan-300 px-1 py-0.5 rounded text-[11px] font-mono">$1</code>')
-    .replace(/^- (.+)$/gm, '<li class="flex gap-1.5 text-[12px] text-white/60 leading-relaxed ml-1"><span>&bull;</span><span>$1</span></li>')
+    .replace(/^### (.+)$/gm, '<h3 class="text-sm font-bold text-white/80 mt-3 mb-1">$1</h3>')
+    .replace(/^- (.+)$/gm, '<li class="flex gap-1.5 text-[12px] text-white/60 leading-relaxed ml-1"><span class="shrink-0">&bull;</span><span>$1</span></li>')
     .replace(/\n\n/g, '</p><p class="text-[13px] text-white/60 leading-relaxed mt-2">')
     .replace(/\n/g, '<br/>')
   return (
@@ -139,16 +174,18 @@ function MiniMD({ text }: { text: string }) {
 function ExecutionPill({ labels }: { labels: string[] }) {
   if (!labels.length) return null
   return (
-    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-      className="mt-2 flex items-center gap-1.5 flex-wrap">
-      <span className="text-[10px] font-semibold text-emerald-300/70 flex items-center gap-1">
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
+      className="mt-2.5 flex items-start gap-1.5 flex-wrap">
+      <span className="text-[10px] font-bold text-emerald-300/80 flex items-center gap-1 shrink-0 mt-0.5">
         <Zap className="w-2.5 h-2.5" /> Executed:
       </span>
-      {labels.map((l, i) => (
-        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300/80 border border-emerald-400/15">
-          {l}
-        </span>
-      ))}
+      <div className="flex flex-wrap gap-1">
+        {labels.map((l, i) => (
+          <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300/80 border border-emerald-400/15">
+            {l}
+          </span>
+        ))}
+      </div>
     </motion.div>
   )
 }
@@ -157,21 +194,18 @@ function Bubble({ msg }: { msg: ChatMessage }) {
   const isSherif = msg.role === 'sherif'
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}
-      className={cn('flex gap-2', !isSherif && 'flex-row-reverse')}>
+      className={cn('flex gap-2.5', !isSherif && 'flex-row-reverse')}>
       <div className={cn('w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-bold mt-0.5',
-        isSherif ? 'bg-purple-500/20 text-purple-300' : 'bg-cyan-500/20 text-cyan-300')}>
+        isSherif ? 'bg-purple-500/20 text-purple-300 border border-purple-400/20' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/20')}>
         {isSherif ? '🤖' : '👤'}
       </div>
-      <div className={cn('max-w-[85%] px-3 py-2.5 rounded-2xl',
-        isSherif ? 'bg-white/[0.04] border border-white/[0.07] rounded-tl-sm' : 'bg-cyan-500/15 border border-cyan-400/20 text-cyan-100 rounded-tr-sm')}>
+      <div className={cn('max-w-[85%] rounded-2xl px-3.5 py-2.5',
+        isSherif ? 'bg-white/[0.04] border border-white/[0.07] rounded-tl-none' : 'bg-cyan-500/15 border border-cyan-400/20 text-cyan-100 rounded-tr-none')}>
         {isSherif
           ? msg.text
-            ? <>
-                <MiniMD text={msg.text} />
-                {msg.executedActions && <ExecutionPill labels={msg.executedActions} />}
-              </>
+            ? <><MiniMD text={msg.text} />{msg.executedActions && <ExecutionPill labels={msg.executedActions} />}</>
             : <span className="text-[12px] text-white/30 italic flex items-center gap-1.5"><Bot className="w-3 h-3 animate-pulse text-purple-400" /> Sherif is thinking…</span>
-          : <p className="text-[13px]">{msg.text}</p>
+          : <p className="text-[13px] leading-relaxed">{msg.text}</p>
         }
       </div>
     </motion.div>
@@ -180,7 +214,6 @@ function Bubble({ msg }: { msg: ChatMessage }) {
 
 export function GlobalSherifCopilot() {
   const [open, setOpen] = useState(false)
-  const [minimized, setMinimized] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [apiHistory, setApiHistory] = useState<{ role: 'user' | 'model'; content: string }[]>([])
   const [input, setInput] = useState('')
@@ -197,13 +230,9 @@ export function GlobalSherifCopilot() {
   } = useProgressStore()
   const stats = computeStats(moduleStatuses)
 
-  // ── Build live OS context snapshot ──────────────────────────────────────
   const buildContext = useCallback(() => {
     const completedIds = CURRICULUM
-      .filter((m) => {
-        const s = moduleStatuses[m.id]
-        return s === 'completed' || s === 'passed'
-      })
+      .filter((m) => { const s = moduleStatuses[m.id]; return s === 'completed' || s === 'passed' })
       .map((m) => m.id)
     const nextMods = CURRICULUM
       .filter((m) => getEffectiveStatus(m.id, m.isPassed, moduleStatuses) === 'not-started')
@@ -213,21 +242,31 @@ export function GlobalSherifCopilot() {
       ? { title: focusedTaskTitle, durationMins: focusedTaskDurationSecs ? Math.round(focusedTaskDurationSecs / 60) : null }
       : null
     return JSON.stringify({
-      viewMode,
-      activeSprint,
+      viewMode, activeSprint,
       overallPercentage: stats.overallPercentage,
       completedModules: completedIds.length,
       totalModules: stats.totalModules,
-      completedModuleIds: completedIds.slice(-5), // last 5 completed
+      recentCompletedIds: completedIds.slice(-5),
       nextModules: nextMods,
       activePomodoro,
       hasDailyPlan: !!activeDailyPlan,
     })
   }, [moduleStatuses, focusedTaskTitle, focusedTaskDurationSecs, viewMode, activeSprint, activeDailyPlan, stats])
 
-  const scrollDown = useCallback(() => { setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 60) }, [])
+  const scrollDown = useCallback(() => {
+    setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), 80)
+  }, [])
 
-  useEffect(() => { if (open && !minimized) setTimeout(() => textareaRef.current?.focus(), 150) }, [open, minimized])
+  useEffect(() => {
+    if (open) setTimeout(() => textareaRef.current?.focus(), 200)
+  }, [open])
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape' && open) setOpen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [open])
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading || isStreaming) return
@@ -236,6 +275,8 @@ export function GlobalSherifCopilot() {
     const nextHist = [...apiHistory, { role: 'user' as const, content: text.trim() }]
     setMessages((p) => [...p, userMsg])
     setInput('')
+    // Reset textarea height
+    if (textareaRef.current) { textareaRef.current.style.height = 'auto' }
     setApiHistory(nextHist)
     scrollDown()
 
@@ -270,27 +311,27 @@ export function GlobalSherifCopilot() {
         const { done, value } = await reader.read()
         if (done) break
         full += dec.decode(value, { stream: true })
-        // Strip dispatch block from live preview (show clean text while streaming)
         setMessages((p) => p.map((m) => m.id === sherifId ? { ...m, text: stripDispatch(full) } : m))
       }
       setIsStreaming(false)
 
-      // Parse and execute actions from the complete response
+      // ── Parse & execute dispatched actions ──
       const actions = parseActions(full)
-      const cleanText = stripDispatch(full)
-      let executedLabels: string[] = []
+      const hasReset = actions.some((a) => a.type === 'RESET_PROGRESS')
+      if (hasReset) setResetPending(true)
+      const safeActions = actions.filter((a) => a.type !== 'RESET_PROGRESS')
+      let labels = safeActions.length > 0 ? executeActions(safeActions) : []
 
-      if (actions.length > 0) {
-        const hasReset = actions.some((a) => a.type === 'RESET_PROGRESS')
-        if (hasReset) setResetPending(true)
-        executedLabels = executeActions(
-          actions.filter((a) => a.type !== 'RESET_PROGRESS'),
-          () => false // Reset requires UI confirmation — handled separately
-        )
+      // ── Intent safety net: fallback timer synthesis ──
+      const cleanText = stripDispatch(full)
+      const fallbackTimer = extractFallbackTimerAction(full, safeActions)
+      if (fallbackTimer) {
+        const fallbackLabels = executeActions([fallbackTimer])
+        labels = [...labels, ...fallbackLabels]
       }
 
       setMessages((p) => p.map((m) => m.id === sherifId
-        ? { ...m, text: cleanText, executedActions: executedLabels.length ? executedLabels : undefined }
+        ? { ...m, text: cleanText, executedActions: labels.length ? labels : undefined }
         : m
       ))
       setApiHistory((h) => [...h, { role: 'model', content: cleanText }])
@@ -300,8 +341,7 @@ export function GlobalSherifCopilot() {
       setIsLoading(false)
       setIsStreaming(false)
       setMessages((p) => p.map((m) => m.id === sherifId
-        ? { ...m, text: `⚠️ ${(e as Error).message}` }
-        : m
+        ? { ...m, text: `⚠️ ${(e as Error).message}` } : m
       ))
     }
   }, [isLoading, isStreaming, apiHistory, buildContext, scrollDown])
@@ -330,11 +370,11 @@ export function GlobalSherifCopilot() {
       <AnimatePresence>
         {resetPending && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
               className="glass-strong border border-red-400/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
               <h3 className="text-sm font-bold text-red-300 mb-2">⚠️ Confirm Progress Reset</h3>
-              <p className="text-xs text-white/50 mb-4">Sherif wants to reset all module progress to 0%. This cannot be undone. Are you sure?</p>
+              <p className="text-xs text-white/50 mb-4">Sherif wants to reset all module progress to 0%. This cannot be undone.</p>
               <div className="flex gap-2">
                 <button onClick={() => { useProgressStore.getState().resetProgress(); setResetPending(false) }}
                   className="flex-1 py-2 rounded-xl bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold transition-all">
@@ -350,11 +390,11 @@ export function GlobalSherifCopilot() {
         )}
       </AnimatePresence>
 
-      {/* ── Sherif FAB ── */}
+      {/* ── FAB Button ── */}
       <motion.button
         initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1.2, type: 'spring', stiffness: 300 }}
-        onClick={() => { setOpen(true); setMinimized(false) }}
+        onClick={() => setOpen(true)}
         className={cn(
           'fixed bottom-20 right-6 z-40 flex items-center gap-2 pl-2.5 pr-3.5 py-2 rounded-2xl glass-strong border shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95',
           open ? 'border-purple-400/40 bg-purple-500/10' : 'border-white/[0.09] hover:border-purple-400/30'
@@ -371,103 +411,114 @@ export function GlobalSherifCopilot() {
         </div>
       </motion.button>
 
-      {/* ── Chat Window ── */}
+      {/* ── Mobile Backdrop ── */}
+      <AnimatePresence>
+        {open && (
+          <motion.div key="backdrop"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[59] sm:hidden" />
+        )}
+      </AnimatePresence>
+
+      {/* ── Slide-Over Panel (replaces clipping floating box) ── */}
       <AnimatePresence>
         {open && (
           <motion.div key="copilot"
-            initial={{ opacity: 0, y: 24, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.96 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            className="fixed bottom-36 right-6 z-50 glass-strong border border-white/[0.12] shadow-2xl rounded-2xl overflow-hidden flex flex-col w-[calc(100vw-48px)] sm:w-[420px] max-w-[95vw]"
-            style={{ height: minimized ? 'auto' : 'min(600px, 85vh)' }}>
+            initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            className="fixed inset-y-0 right-0 z-[60] w-full sm:w-[440px] max-w-full flex flex-col bg-zinc-950/98 backdrop-blur-2xl border-l border-white/[0.10] shadow-2xl overflow-hidden"
+          >
+            {/* Purple accent line */}
+            <div className="h-[2px] w-full shrink-0 bg-gradient-to-r from-purple-500/60 via-cyan-500/40 to-transparent" />
 
             {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.07] shrink-0 bg-purple-500/[0.04]">
+            <div className="shrink-0 flex items-center gap-3 px-5 py-4 border-b border-white/[0.07]">
               <div className="relative shrink-0">
-                <span className="text-base">🤖</span>
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xl">🤖</span>
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-purple-200 leading-none">Sherif</p>
-                <p className="text-[10px] text-purple-300/50 mt-0.5">Autonomous OS Controller · {stats.overallPercentage}% complete</p>
+                <p className="text-sm font-bold text-white leading-tight">Sherif</p>
+                <p className="text-[11px] text-purple-300/60 mt-0.5 flex items-center gap-1">
+                  <Cpu className="w-2.5 h-2.5" /> Autonomous OS Controller · {stats.overallPercentage}% complete
+                </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {messages.length > 0 && (
-                  <button onClick={handleClear} title="Clear chat"
-                    className="p-1.5 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/5 transition-colors">
-                    <RotateCcw className="w-3.5 h-3.5" />
+                  <button onClick={handleClear} title="Clear conversation"
+                    className="p-2 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/5 transition-colors">
+                    <RotateCcw className="w-4 h-4" />
                   </button>
                 )}
-                <button onClick={() => setMinimized((v) => !v)} title={minimized ? 'Expand' : 'Minimize'}
-                  className="p-1.5 rounded-lg text-white/25 hover:text-white/60 hover:bg-white/5 transition-colors">
-                  {minimized ? <ChevronDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
-                </button>
                 <button onClick={() => setOpen(false)} title="Close"
-                  className="p-1.5 rounded-lg text-white/25 hover:text-white/70 hover:bg-white/5 transition-colors">
-                  <X className="w-3.5 h-3.5" />
+                  className="p-2 rounded-lg text-white/25 hover:text-white/70 hover:bg-white/5 transition-colors">
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {!minimized && (
-              <>
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 min-h-0">
-                  {messages.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full text-center gap-4 opacity-60 py-8">
-                      <Bot className="w-10 h-10 text-purple-400" />
-                      <div>
-                        <p className="text-sm text-white/50 font-medium">Sherif — OS Controller</p>
-                        <p className="text-[11px] text-white/25 mt-1 max-w-[240px]">I can build study plans, set timers, switch views, mark progress, and navigate your board. Just ask.</p>
-                      </div>
-                      <div className="flex flex-col gap-1.5 w-full">
-                        {QUICK_PROMPTS.map((q) => (
-                          <button key={q} onClick={() => sendMessage(q)}
-                            className="text-[11px] px-3 py-2 rounded-xl border border-white/[0.07] text-white/40 hover:text-white/70 hover:border-white/15 hover:bg-white/[0.03] transition-all text-left">
-                            {q}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <AnimatePresence initial={false}>
-                    {messages.map((msg) => <Bubble key={msg.id} msg={msg} />)}
-                  </AnimatePresence>
-                  {isLoading && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2">
-                      <div className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center text-xs shrink-0">🤖</div>
-                      <div className="flex items-center gap-1.5 px-3 py-2.5 rounded-2xl bg-white/[0.04] border border-white/[0.06]">
-                        <Bot className="w-3 h-3 text-purple-400 animate-pulse" />
-                        <span className="text-[11px] text-white/30">Thinking…</span>
-                      </div>
-                    </motion.div>
-                  )}
-                  <div ref={endRef} />
-                </div>
-
-                {/* Input bar */}
-                <div className="shrink-0 border-t border-white/[0.07] p-3 bg-black/20">
-                  <div className="flex items-end gap-2">
-                    <textarea ref={textareaRef} value={input}
-                      onChange={(e) => {
-                        setInput(e.target.value)
-                        e.target.style.height = 'auto'
-                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
-                      placeholder="Ask Sherif or give a command…" rows={1} disabled={isLoading || isStreaming}
-                      className="flex-1 rounded-xl px-3 py-2.5 resize-none scrollbar-none bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 transition-all disabled:opacity-40 leading-relaxed"
-                      style={{ minHeight: '40px', maxHeight: '120px' }} />
-                    <button onClick={() => sendMessage(input)} disabled={!input.trim() || isLoading || isStreaming}
-                      className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-purple-500/80 hover:bg-purple-500 text-white text-xs font-semibold transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
-                      {isLoading || isStreaming ? <Bot className="w-3.5 h-3.5 animate-pulse" /> : <Send className="w-3.5 h-3.5" />}
-                    </button>
+            {/* Message stream — flex-1, scrollable */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-4 min-h-0">
+              {messages.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-full text-center gap-5 py-8">
+                  <div className="w-16 h-16 rounded-2xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-3xl">🤖</div>
+                  <div>
+                    <p className="text-sm font-semibold text-white/60">Sherif — OS Controller</p>
+                    <p className="text-[12px] text-white/30 mt-1.5 max-w-[260px] leading-relaxed">
+                      I can build study plans, set timers, switch views, mark progress, and navigate your board. Just ask me anything.
+                    </p>
                   </div>
-                  <p className="text-[9px] text-white/15 mt-1.5 text-center">
-                    {stats.overallPercentage}% complete · {focusedTaskTitle ? `🍅 ${focusedTaskTitle}` : 'No active task'} · Enter to send
-                  </p>
+                  <div className="w-full space-y-1.5">
+                    {QUICK_PROMPTS.map((q) => (
+                      <button key={q} onClick={() => sendMessage(q)}
+                        className="w-full text-[12px] px-4 py-2.5 rounded-xl border border-white/[0.07] text-white/40 hover:text-white/75 hover:border-purple-400/30 hover:bg-purple-500/5 transition-all text-left">
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </>
-            )}
+              )}
+              <AnimatePresence initial={false}>
+                {messages.map((msg) => <Bubble key={msg.id} msg={msg} />)}
+              </AnimatePresence>
+              {isLoading && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-purple-500/20 border border-purple-400/20 flex items-center justify-center text-sm shrink-0">🤖</div>
+                  <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl rounded-tl-none bg-white/[0.04] border border-white/[0.07]">
+                    <Bot className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                    <span className="text-[12px] text-white/30">Thinking…</span>
+                  </div>
+                </motion.div>
+              )}
+              <div ref={endRef} />
+            </div>
+
+            {/* Pinned input bar */}
+            <div className="shrink-0 border-t border-white/[0.07] px-4 py-3 bg-zinc-950/80">
+              <div className="flex items-end gap-2">
+                <textarea ref={textareaRef} value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value)
+                    e.target.style.height = 'auto'
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
+                  }}
+                  placeholder="Ask Sherif or give a command… (Shift+Enter for new line)"
+                  rows={1} disabled={isLoading || isStreaming}
+                  className="flex-1 rounded-xl px-3.5 py-2.5 resize-none scrollbar-none bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 transition-all disabled:opacity-40 leading-relaxed"
+                  style={{ minHeight: '42px', maxHeight: '140px' }} />
+                <button onClick={() => sendMessage(input)}  disabled={!input.trim() || isLoading || isStreaming}
+                  className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-purple-500/80 hover:bg-purple-500 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+                  {isLoading || isStreaming ? <Bot className="w-4 h-4 animate-pulse" /> : <Send className="w-4 h-4" />}
+                </button>
+              </div>
+              <p className="text-[9px] text-white/15 mt-1.5 text-center">
+                {focusedTaskTitle ? `🍅 Active: ${focusedTaskTitle}` : 'No active task'} · Enter to send
+              </p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

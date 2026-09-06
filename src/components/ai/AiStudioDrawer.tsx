@@ -935,7 +935,7 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                                   <p className="text-sm text-red-400">{error}</p>
                                 </div>
                               ) : isLoading ? (
-                                <div className="flex items-center gap-2 text-sm text-white/30 py-6">
+                                <div className="flex items-center gap-2 text-sm text-white/30 py-4">
                                   <Bot className="w-4 h-4 animate-pulse text-purple-400" /> Sherif is preparing your review…
                                 </div>
                               ) : tabId === 'task-checker' ? (
@@ -954,11 +954,11 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                             </>
                           )}
 
-                          {/* Empty state */}
+                          {/* Empty state — top-aligned, no flex centering that creates void */}
                           {!response && !isLoading && !error && (
-                            <div className="flex flex-col items-center justify-center text-center gap-3 opacity-30 py-12">
-                              <Sparkles className="w-10 h-10 text-purple-400" />
-                              <p className="text-sm text-white/50 max-w-xs">
+                            <div className="pt-4 flex items-start gap-3 opacity-30">
+                              <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+                              <p className="text-sm text-white/50">
                                 {tabId === 'task-checker' && 'Paste your code, SQL schema, Dockerfile, or network config — Sherif will give you a structured Senior Architect rubric review.'}
                                 {tabId === 'linkedin' && 'Choose scope, add context, and generate a high-impact post for Module, Sprint, or Track mastery.'}
                               </p>
