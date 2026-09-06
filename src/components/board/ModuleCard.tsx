@@ -19,6 +19,7 @@ import {
   Archive,
   Trash2,
   Lock,
+  Play,
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 import type { CurriculumModule, ItemStatus, AiMode, ArtifactUrls } from '@/lib/types'
@@ -32,6 +33,7 @@ import {
 } from '@/lib/utils'
 import { CURRICULUM } from '@/lib/curriculum'
 import { LessonAccordion } from './LessonAccordion'
+import { useProgressStore } from '@/store/progressStore'
 
 interface ModuleCardProps {
   module: CurriculumModule
@@ -419,6 +421,28 @@ export function ModuleCard({
                 <Sparkles className="w-3 h-3" />
                 AI
               </button>
+
+              {/* Focus — inject into Pomodoro */}
+              {!isLocked && (
+                <button
+                  onClick={() => {
+                    // Parse totalDurationText e.g. "3h 40m", "45m", "1h" → minutes
+                    const txt = module.totalDurationText
+                    let mins = 0
+                    const hMatch = txt.match(/(\d+)\s*h/)
+                    const mMatch = txt.match(/(\d+)\s*m/)
+                    if (hMatch) mins += parseInt(hMatch[1]) * 60
+                    if (mMatch) mins += parseInt(mMatch[1])
+                    const duration = Math.max(1, mins || 25)
+                    useProgressStore.getState().setFocusedTask(module.title, duration, module.id)
+                  }}
+                  title="Focus Pomodoro on this module"
+                  className="flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg border text-white/35 border-white/[0.06] hover:border-cyan-400/30 hover:text-cyan-300 hover:bg-cyan-500/5 transition-all duration-200 active:scale-95"
+                >
+                  <Play className="w-3 h-3" />
+                  Focus
+                </button>
+              )}
             </div>
           </div>
         </div>

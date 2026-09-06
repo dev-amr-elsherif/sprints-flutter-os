@@ -31,6 +31,8 @@ export const useProgressStore = create<ProgressStore>()(
       // Pomodoro / Zen
       zenMode: false,
       focusedModuleId: null,
+      focusedTaskTitle: null,
+      focusedTaskDurationSecs: null,
 
       // ─── Module status actions ───────────────────────────────────────────
       cycleModuleStatus: (id: string, currentEffective: ItemStatus) =>
@@ -149,6 +151,12 @@ export const useProgressStore = create<ProgressStore>()(
       // ─── Pomodoro / Zen ───────────────────────────────────────────────────
       setZenMode: (v: boolean) => set({ zenMode: v }),
       setFocusedModule: (id: string | null) => set({ focusedModuleId: id }),
+      setFocusedTask: (taskTitle: string, durationMinutes: number, moduleId?: string) =>
+        set({
+          focusedTaskTitle: taskTitle,
+          focusedTaskDurationSecs: durationMinutes * 60,
+          focusedModuleId: moduleId ?? null,
+        }),
     }),
     {
       name: 'sprints-os-v2-progress',

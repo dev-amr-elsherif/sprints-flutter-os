@@ -106,6 +106,8 @@ export interface ProgressStore {
   // Pomodoro / Zen
   zenMode: boolean
   focusedModuleId: string | null
+  focusedTaskTitle: string | null          // display label on timer
+  focusedTaskDurationSecs: number | null   // custom duration (seconds) injected from planner
 
   // Actions
   cycleModuleStatus: (id: string, currentEffective: ItemStatus) => void
@@ -127,6 +129,8 @@ export interface ProgressStore {
   // Pomodoro / Zen actions
   setZenMode: (v: boolean) => void
   setFocusedModule: (id: string | null) => void
+  /** Inject a task into the Pomodoro timer from the planner or module card */
+  setFocusedTask: (taskTitle: string, durationMinutes: number, moduleId?: string) => void
 }
 
 // ─── AI Daily Planner schedule types ─────────────────────────────────────────

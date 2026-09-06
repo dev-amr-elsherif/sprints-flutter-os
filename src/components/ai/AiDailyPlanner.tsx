@@ -131,28 +131,51 @@ function TaskLessonChecklist({ task }: { task: DailyPlanTask }) {
       <div className="space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
         {module.lessons.map((lesson) => {
           const checked = lessonStatuses[lesson.id] === true
+
+          // Parse duration string like "4m 16s", "1h 30m", "24s" into minutes
+          const parseLessonMinutes = (dur?: string): number => {
+            if (!dur) return 25
+            let m = 0
+            const hMatch = dur.match(/(\d+)\s*h/)
+            const mMatch = dur.match(/(\d+)\s*m/)
+            if (hMatch) m += parseInt(hMatch[1]) * 60
+            if (mMatch) m += parseInt(mMatch[1])
+            return Math.max(1, m || 25)
+          }
+
           return (
-            <button
-              key={lesson.id}
-              onClick={() => toggleLesson(lesson.id)}
-              className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left transition-all group',
-                'hover:bg-white/[0.04]',
-                checked ? 'opacity-60' : 'opacity-100'
-              )}
-            >
-              {checked ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              ) : (
-                <Circle className="w-3.5 h-3.5 text-white/20 group-hover:text-white/40 shrink-0 transition-colors" />
-              )}
+            <div key={lesson.id} className={cn('flex items-center gap-2 px-2 py-1 rounded-lg group hover:bg-white/[0.04] transition-all', checked ? 'opacity-60' : 'opacity-100')}>
+              {/* Checkbox toggle */}
+              <button
+                onClick={() => toggleLesson(lesson.id)}
+                className="shrink-0 flex-shrink-0"
+              >
+                {checked ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Circle className="w-3.5 h-3.5 text-white/20 group-hover:text-white/40 transition-colors" />
+                )}
+              </button>
+
+              {/* Title */}
               <span className={cn('text-[11px] leading-snug flex-1 text-left', checked ? 'text-white/30 line-through' : 'text-white/65')}>
                 {lesson.title}
               </span>
-              {lesson.duration && (
-                <span className="text-[10px] font-mono text-white/20 shrink-0">{lesson.duration}</span>
-              )}
-            </button>
+
+              {/* Duration + focus button */}
+              <div className="flex items-center gap-1 shrink-0">
+                {lesson.duration && (
+                  <span className="text-[10px] font-mono text-white/20">{lesson.duration}</span>
+                )}
+                <button
+                  onClick={() => useProgressStore.getState().setFocusedTask(lesson.title, parseLessonMinutes(lesson.duration), task.moduleId)}
+                  title={`Focus Pomodoro on: ${lesson.title}`}
+                  className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] text-cyan-400/70 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-400/15 transition-all"
+                >
+                  <Play className="w-2 h-2" />
+                </button>
+              </div>
+            </div>
           )
         })}
       </div>
@@ -174,7 +197,6 @@ function CoreTaskCard({
   currentPlanModuleIds: string[]
   onSwap: (index: number, newTask: DailyPlanTask) => void
 }) {
-  const { setFocusedModule } = useProgressStore()
   const [lessonsOpen, setLessonsOpen] = useState(false)
 
   const handleSwap = useCallback(() => {
@@ -193,7 +215,8 @@ function CoreTaskCard({
 
   const handleFocus = () => {
     const found = CURRICULUM.find((m) => m.id === task.moduleId)
-    if (found) setFocusedModule(found.id)
+    // Inject title + duration into Pomodoro timer
+    useProgressStore.getState().setFocusedTask(task.title, task.durationMinutes, found?.id)
   }
 
   return (
