@@ -98,17 +98,37 @@ export function ModuleCard({
   const hasTaskOrCapstone = module.isTask || module.isCapstone
 
   // ── Prerequisite lock state ────────────────────────────────────────────────
-  // Build a quick lookup: moduleId → title for prereq display
   const moduleIdToTitle = Object.fromEntries(CURRICULUM.map((m) => [m.id, m.title]))
 
-  const missingPrereqTitles: string[] = (module.prerequisites ?? [])
+  // Keep both ID and title so we can scroll-to the card by DOM id
+  const missingPrereqs: { id: string; title: string }[] = (module.prerequisites ?? [])
     .filter((prereqId) => {
       const prereqStatus = getEffectiveStatus(prereqId, undefined, moduleStatuses)
       return prereqStatus !== 'completed' && prereqStatus !== 'passed'
     })
-    .map((prereqId) => moduleIdToTitle[prereqId] ?? prereqId)
+    .map((prereqId) => ({ id: prereqId, title: moduleIdToTitle[prereqId] ?? prereqId }))
 
-  const isLocked = missingPrereqTitles.length > 0
+  const missingPrereqTitles = missingPrereqs.map((p) => p.title) // kept for compat
+  const isLocked = missingPrereqs.length > 0
+
+  // ── Artifact Vault derived state ───────────────────────────────────────────
+  const savedLinksCount = [
+    savedArtifact?.repoUrl,
+    savedArtifact?.prUrl,
+    savedArtifact?.demoUrl,
+  ].filter((url) => Boolean(url && url.trim().length > 0)).length
+  const hasDeliverables = savedLinksCount > 0
+
+  // ── Scroll-to-prerequisite with glow highlight ─────────────────────────────
+  const handleScrollToPrereq = (prereqId: string) => {
+    const targetEl = document.getElementById(`module-${prereqId}`)
+    if (!targetEl) return
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Temporarily add a glowing ring class for 2.5 s
+    const GLOW_CLASS = 'prereq-highlight-ring'
+    targetEl.classList.add(GLOW_CLASS)
+    setTimeout(() => targetEl.classList.remove(GLOW_CLASS), 2500)
+  }
 
   const handleSaveArtifact = () => {
     onSaveArtifact(module.id, { repoUrl: repoUrl.trim(), prUrl: prUrl.trim(), demoUrl: demoUrl.trim() })
@@ -149,6 +169,7 @@ export function ModuleCard({
 
   return (
     <motion.div
+      id={`module-${module.id}`}
       layout
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
@@ -340,7 +361,7 @@ export function ModuleCard({
             <motion.div
               initial={{ opacity: 0, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col gap-1 px-3 py-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/20"
+              className="flex flex-col gap-1.5 px-3 py-2 rounded-xl bg-amber-500/[0.06] border border-amber-500/20"
             >
               <div className="flex items-center gap-1.5">
                 <Lock className="w-3 h-3 text-amber-400/70 shrink-0" />
@@ -348,15 +369,24 @@ export function ModuleCard({
                   Prerequisites pending
                 </span>
               </div>
-              <div className="flex flex-col gap-0.5 pl-4">
-                {missingPrereqTitles.map((title) => (
-                  <span key={title} className="text-[10px] text-amber-200/55 leading-snug">
-                    → {title}
-                  </span>
+              {/* Clickable prerequisite pills */}
+              <div className="flex flex-col gap-1 pl-4">
+                {missingPrereqs.map((prereq) => (
+                  <button
+                    key={prereq.id}
+                    onClick={() => handleScrollToPrereq(prereq.id)}
+                    title={`Scroll to: ${prereq.title}`}
+                    className="group/prereq flex items-center gap-1 text-[10px] text-amber-200/60 hover:text-amber-300 transition-colors cursor-pointer text-left w-fit"
+                  >
+                    <span className="text-amber-400/50 group-hover/prereq:text-amber-300 transition-colors">↗</span>
+                    <span className="group-hover/prereq:underline underline-offset-2 leading-snug">
+                      {prereq.title}
+                    </span>
+                  </button>
                 ))}
               </div>
-              <p className="text-[9px] text-white/25 pl-4 mt-0.5">
-                Complete the above modules first to unlock this track
+              <p className="text-[9px] text-white/25 pl-4">
+                Click a prerequisite above to navigate to it
               </p>
             </motion.div>
           )}
@@ -402,14 +432,23 @@ export function ModuleCard({
                   onClick={() => setVaultOpen((v) => !v)}
                   className={cn(
                     'flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg border transition-all duration-200',
-                    vaultOpen || savedArtifact
+                    vaultOpen && !hasDeliverables
                       ? 'text-amber-300 border-amber-400/30 bg-amber-500/8'
-                      : 'text-white/35 border-white/[0.06] hover:border-amber-400/25 hover:text-amber-300/70'
+                      : hasDeliverables
+                        ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 shadow-[0_0_8px_rgba(16,185,129,0.15)]'
+                        : 'text-white/35 border-white/[0.06] hover:border-amber-400/25 hover:text-amber-300/70'
                   )}
-                  title="Artifact Vault — save repo, PR & demo links"
+                  title={hasDeliverables ? `Saved deliverables: ${savedLinksCount} link(s) on file` : 'Artifact Vault — save repo, PR & demo links'}
                 >
                   <Archive className="w-3 h-3" />
-                  {savedArtifact && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                  {hasDeliverables ? (
+                    <span className="flex items-center gap-1">
+                      {savedLinksCount}
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    </span>
+                  ) : (
+                    savedArtifact && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  )}
                 </button>
               )}
 
@@ -483,6 +522,17 @@ export function ModuleCard({
                 <div className="flex items-center gap-2 mb-1">
                   <Archive className="w-3.5 h-3.5 text-amber-400" />
                   <span className="text-[11px] font-semibold text-white/60">Artifact Vault</span>
+                  {/* Endpoints configured badge */}
+                  <span className={cn(
+                    'ml-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border',
+                    savedLinksCount === 3
+                      ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
+                      : savedLinksCount > 0
+                        ? 'text-amber-300 bg-amber-500/10 border-amber-500/20'
+                        : 'text-white/20 bg-white/5 border-white/10'
+                  )}>
+                    {savedLinksCount} of 3 endpoints
+                  </span>
                   {savedArtifact?.savedAt && (
                     <span className="text-[9px] text-white/20 ml-auto">
                       saved {new Date(savedArtifact.savedAt).toLocaleDateString()}
@@ -492,32 +542,35 @@ export function ModuleCard({
 
                 {/* URL Inputs */}
                 {[
-                  { icon: <Github className="w-3 h-3" />, label: 'GitHub Repo', value: repoUrl, setter: setRepoUrl, placeholder: 'https://github.com/user/repo' },
-                  { icon: <Link2 className="w-3 h-3" />, label: 'Pull Request', value: prUrl, setter: setPrUrl, placeholder: 'https://github.com/user/repo/pull/1' },
-                  { icon: <ExternalLink className="w-3 h-3" />, label: 'Live Demo', value: demoUrl, setter: setDemoUrl, placeholder: 'https://your-app.web.app' },
-                ].map(({ icon, label, value, setter, placeholder }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <span className="text-white/25 shrink-0">{icon}</span>
-                    <input
-                      type="url"
-                      value={value}
-                      onChange={(e) => setter(e.target.value)}
-                      placeholder={placeholder}
-                      className={cn(
-                        'flex-1 px-2.5 py-1.5 rounded-lg text-[11px]',
-                        'bg-white/[0.03] border border-white/[0.07]',
-                        'text-white/70 placeholder:text-white/15',
-                        'focus:outline-none focus:border-amber-400/30 transition-all'
+                  { icon: <Github className="w-3 h-3" />, label: 'GitHub Repo', value: repoUrl, setter: setRepoUrl, placeholder: 'https://github.com/user/repo', savedUrl: savedArtifact?.repoUrl },
+                  { icon: <Link2 className="w-3 h-3" />, label: 'Pull Request', value: prUrl, setter: setPrUrl, placeholder: 'https://github.com/user/repo/pull/1', savedUrl: savedArtifact?.prUrl },
+                  { icon: <ExternalLink className="w-3 h-3" />, label: 'Live Demo', value: demoUrl, setter: setDemoUrl, placeholder: 'https://your-app.web.app', savedUrl: savedArtifact?.demoUrl },
+                ].map(({ icon, label, value, setter, placeholder, savedUrl }) => {
+                  const isSaved = Boolean(savedUrl && savedUrl.trim().length > 0)
+                  return (
+                    <div key={label} className="flex items-center gap-2">
+                      <span className={cn('shrink-0 transition-colors', isSaved ? 'text-emerald-400/70' : 'text-white/25')}>{icon}</span>
+                      <input
+                        type="url"
+                        value={value}
+                        onChange={(e) => setter(e.target.value)}
+                        placeholder={placeholder}
+                        className={cn(
+                          'flex-1 px-2.5 py-1.5 rounded-lg text-[11px]',
+                          'bg-white/[0.03] border transition-all',
+                          isSaved ? 'border-emerald-500/20 focus:border-emerald-400/40' : 'border-white/[0.07] focus:border-amber-400/30',
+                          'text-white/70 placeholder:text-white/15 focus:outline-none'
+                        )}
+                      />
+                      {value && (
+                        <a href={value} target="_blank" rel="noopener noreferrer"
+                          className={cn('transition-colors shrink-0', isSaved ? 'text-emerald-400/60 hover:text-emerald-300' : 'text-white/20 hover:text-amber-300')}>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       )}
-                    />
-                    {value && (
-                      <a href={value} target="_blank" rel="noopener noreferrer"
-                        className="text-white/20 hover:text-amber-300 transition-colors shrink-0">
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  )
+                })}
 
                 {/* Save / Clear */}
                 <div className="flex items-center gap-2 pt-0.5">
