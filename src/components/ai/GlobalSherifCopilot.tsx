@@ -568,7 +568,7 @@ export function GlobalSherifCopilot() {
                     e.target.style.height = `${Math.min(e.target.scrollHeight, 140)}px`
                   }}
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
-                  placeholder="Ask Sherif or give a command\u2026 (Shift+Enter for new line)"
+                  placeholder="Ask Sherif or give a command... (Shift+Enter for new line)"
                   rows={1} disabled={isLoading || isStreaming}
                   className="flex-1 rounded-xl px-3.5 py-2.5 resize-none scrollbar-none bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 transition-all disabled:opacity-40 leading-relaxed"
                   style={{ minHeight: '42px', maxHeight: '140px' }} />
