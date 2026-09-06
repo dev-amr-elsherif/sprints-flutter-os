@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -79,7 +79,7 @@ export default function HomePage() {
 
   return (
     <AuthGate>
-      <div className="min-h-[100dvh]">
+      <div className="min-h-[100dvh] overflow-x-hidden w-full">
       {/* ── Header ── */}
       <Header
         stats={stats}
@@ -98,7 +98,7 @@ export default function HomePage() {
       />
 
       {/* ── Main ── */}
-      <main className="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-5">
+      <main className="w-full max-w-[1680px] mx-auto px-3 sm:px-6 lg:px-8 py-6 space-y-5">
 
         {/* ── Stats Row ── */}
         <motion.div
@@ -112,8 +112,8 @@ export default function HomePage() {
             <RadarStats stats={stats} />
           </div>
 
-          {/* Per-track mini stat cards (always shows 4 tracks regardless of view) */}
-          <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Per-track mini stat cards */}
+          <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
             {ALL_TRACKS.map((track) => {
               const meta = TRACK_META[track]
               const ts = stats.byTrack[track]
@@ -130,16 +130,16 @@ export default function HomePage() {
                   }}
                   whileTap={{ scale: 0.97 }}
                   className={`
-                    p-3.5 rounded-2xl text-left transition-all duration-200 cursor-pointer
+                    p-3 sm:p-3.5 rounded-2xl text-left transition-all duration-200 cursor-pointer
                     glass border
                     ${isActive ? 'border-white/20 bg-white/[0.07]' : 'border-white/[0.06] hover:border-white/12 hover:bg-white/[0.04]'}
                   `}
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base">{meta.emoji}</span>
-                    <span className="text-[11px] font-semibold text-white/60 truncate">{meta.shortLabel}</span>
+                  <div className="flex items-center gap-1.5 sm:gap-2 mb-2">
+                    <span className="text-sm sm:text-base shrink-0">{meta.emoji}</span>
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-white/60 line-clamp-1">{meta.shortLabel}</span>
                   </div>
-                  <div className="text-xl font-bold text-white tabular-nums">
+                  <div className="text-lg sm:text-xl font-bold text-white tabular-nums">
                     {Math.round(ts?.percentage ?? 0)}%
                   </div>
                   <div className="mt-1.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
@@ -336,7 +336,7 @@ export default function HomePage() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1 }}
         onClick={() => setCapsuleDumpOpen(true)}
-        className="fixed bottom-6 left-6 z-40 flex items-center gap-2 px-3 py-2.5 rounded-2xl glass-strong border border-white/[0.09] text-white/50 hover:text-cyan-300 hover:border-cyan-400/25 shadow-xl transition-all duration-200 hover:scale-105"
+        className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-30 flex items-center gap-2 px-3 py-2.5 rounded-2xl glass-strong border border-white/[0.09] text-white/50 hover:text-cyan-300 hover:border-cyan-400/25 shadow-xl transition-all duration-200 hover:scale-105"
         title="Capsule Quick-Dump — paste lesson notes for AI synthesis"
       >
         <FlaskConical className="w-4 h-4" />

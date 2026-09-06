@@ -128,7 +128,7 @@ function TaskLessonChecklist({ task }: { task: DailyPlanTask }) {
       </div>
 
       {/* Lesson rows */}
-      <div className="space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
+      <div className="space-y-0.5 max-h-[380px] overflow-y-auto custom-scrollbar">
         {module.lessons.map((lesson) => {
           const checked = lessonStatuses[lesson.id] === true
 
@@ -158,7 +158,7 @@ function TaskLessonChecklist({ task }: { task: DailyPlanTask }) {
               </button>
 
               {/* Title */}
-              <span className={cn('text-[11px] leading-snug flex-1 text-left', checked ? 'text-white/30 line-through' : 'text-white/65')}>
+              <span className={cn('text-[11px] leading-snug flex-1 text-left min-w-0 break-words', checked ? 'text-white/30 line-through' : 'text-white/65')}>
                 {lesson.title}
               </span>
 
@@ -501,7 +501,7 @@ export function AiDailyPlanner() {
                   onClick={handleGenerate}
                   disabled={isLoading || isStreaming || eligibleModules.length === 0}
                   className={cn(
-                    'ml-auto flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold',
+                    'w-full sm:w-auto sm:ml-auto flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold',
                     'bg-gradient-to-r from-purple-500/80 to-cyan-500/80 hover:from-purple-500 hover:to-cyan-500',
                     'text-white transition-all duration-200 active:scale-95',
                     'disabled:opacity-40 disabled:cursor-not-allowed shadow-md'

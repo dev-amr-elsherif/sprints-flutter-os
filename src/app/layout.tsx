@@ -28,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body
-        className={`${inter.variable} font-sans bg-[#09090b] text-white antialiased min-h-screen`}
+        className={`${inter.variable} font-sans bg-[#09090b] text-white antialiased min-h-[100dvh] overflow-x-hidden`}
         suppressHydrationWarning
       >
         {/* Ambient background orbs */}

@@ -461,7 +461,7 @@ export function GlobalSherifCopilot() {
         transition={{ delay: 1.2, type: 'spring', stiffness: 300 }}
         onClick={() => setOpen(true)}
         className={cn(
-          'fixed bottom-20 right-6 z-40 flex items-center gap-2 pl-2.5 pr-3.5 py-2 rounded-2xl glass-strong border shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95',
+          'fixed bottom-20 sm:bottom-24 right-4 sm:right-6 z-40 flex items-center gap-2 pl-2.5 pr-3.5 py-2 rounded-2xl glass-strong border shadow-2xl transition-all duration-200 hover:scale-105 active:scale-95',
           open ? 'border-purple-400/40 bg-purple-500/10' : 'border-white/[0.09] hover:border-purple-400/30'
         )}
         title="Open Sherif AI Co-Pilot"
@@ -492,7 +492,7 @@ export function GlobalSherifCopilot() {
           <motion.div key="copilot"
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="fixed inset-y-0 right-0 z-[60] w-full sm:w-[440px] max-w-full flex flex-col bg-zinc-950/98 backdrop-blur-2xl border-l border-white/[0.10] shadow-2xl overflow-hidden"
+            className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] max-w-full flex flex-col bg-zinc-950/98 backdrop-blur-2xl border-l border-white/[0.10] shadow-2xl overflow-hidden h-[100dvh]"
           >
             <div className="h-[2px] w-full shrink-0 bg-gradient-to-r from-purple-500/60 via-cyan-500/40 to-transparent" />
 
@@ -559,7 +559,7 @@ export function GlobalSherifCopilot() {
             </div>
 
             {/* Input bar */}
-            <div className="shrink-0 border-t border-white/[0.07] px-4 py-3 bg-zinc-950/80">
+            <div className="shrink-0 border-t border-white/[0.07] px-4 pt-3 pb-safe bg-zinc-950/80">
               <div className="flex items-end gap-2">
                 <textarea ref={textareaRef} value={input}
                   onChange={(e) => {

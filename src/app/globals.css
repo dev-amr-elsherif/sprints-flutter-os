@@ -16,11 +16,16 @@ html {
   background-color: var(--bg);
   color-scheme: dark;
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 body {
   min-height: 100dvh;
   overflow-x: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 /* ── Custom scrollbar ───────────────────────────────────────────────────── */
@@ -37,11 +42,11 @@ body {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.10);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 /* ── Utility layer ──────────────────────────────────────────────────────── */
@@ -83,13 +88,13 @@ body {
     display: none;
   }
 
-  /* Custom scrollbar utility */
+  /* Custom scrollbar utility — slim, ergonomic */
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   }
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
@@ -99,7 +104,12 @@ body {
     border-radius: 9999px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.30);
+  }
+
+  /* Safe-area bottom padding for mobile virtual keyboard */
+  .pb-safe {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 }
 

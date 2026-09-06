@@ -230,10 +230,10 @@ export function Header({
         </div>
 
         {/* ── Row 2: Filter bar (changes by view mode) ── */}
-        <div className="flex items-center gap-2 pb-3 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 pb-3 overflow-x-auto scrollbar-none scroll-smooth">
           {viewMode === 'parallel-tracks' ? (
             /* Track filter tabs */
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 py-0.5">
               {TRACK_SWITCHER.map((item) => {
                 const isActive = activeTrack === item.id
                 const trackMeta = item.id !== 'all' ? TRACK_META[item.id as TrackType] : null
@@ -243,7 +243,7 @@ export function Header({
                     onClick={() => onTrackChange(item.id as TrackType | 'all')}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium',
-                      'transition-all duration-200 whitespace-nowrap select-none',
+                      'transition-all duration-200 whitespace-nowrap select-none shrink-0',
                       isActive
                         ? 'text-white border'
                         : 'text-white/35 hover:text-white/65 hover:bg-white/5 border border-transparent'
@@ -269,7 +269,7 @@ export function Header({
             </div>
           ) : (
             /* Sprint filter tabs */
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 py-0.5">
               {SPRINT_SWITCHER.map((item) => {
                 const isActive =
                   (item.id === 'all' && (!activeSprint || activeSprint === 'all')) ||
@@ -281,7 +281,7 @@ export function Header({
                     onClick={() => onSprintChange(item.id as SprintNumber | 'all')}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium',
-                      'transition-all duration-200 whitespace-nowrap select-none',
+                      'transition-all duration-200 whitespace-nowrap select-none shrink-0',
                       isActive
                         ? 'text-white border shadow-sm'
                         : 'text-white/35 hover:text-white/65 hover:bg-white/5 border border-transparent'
@@ -311,7 +311,7 @@ export function Header({
             <button
               onClick={() => onEnergyFilter('all')}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all select-none',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all select-none whitespace-nowrap shrink-0',
                 energyFilter === 'all'
                   ? 'text-white bg-white/10 border border-white/20'
                   : 'text-white/35 hover:text-white/65 border border-transparent hover:bg-white/5'
@@ -323,7 +323,7 @@ export function Header({
             <button
               onClick={() => onEnergyFilter('high-energy')}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all select-none',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all select-none whitespace-nowrap shrink-0',
                 energyFilter === 'high-energy'
                   ? 'text-red-300 bg-red-500/15 border border-red-500/30'
                   : 'text-white/35 hover:text-white/65 border border-transparent hover:bg-white/5'
@@ -335,7 +335,7 @@ export function Header({
             <button
               onClick={() => onEnergyFilter('micro-learning')}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all select-none',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all select-none whitespace-nowrap shrink-0',
                 energyFilter === 'micro-learning'
                   ? 'text-indigo-300 bg-indigo-500/15 border border-indigo-500/30'
                   : 'text-white/35 hover:text-white/65 border border-transparent hover:bg-white/5'

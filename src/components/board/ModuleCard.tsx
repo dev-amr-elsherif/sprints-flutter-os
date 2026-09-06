@@ -276,14 +276,14 @@ export function ModuleCard({
             <div className="flex-1 min-w-0">
               <h3
                 className={cn(
-                  'text-sm font-semibold leading-snug',
+                  'text-sm font-semibold leading-snug line-clamp-2',
                   isDone ? 'text-white/45 line-through' : 'text-white/90'
                 )}
               >
                 {module.title}
               </h3>
 
-              <div className="flex items-center flex-wrap gap-2 mt-1.5">
+              <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 mt-1.5">
                 {/* Sprint badge */}
                 <span className="text-[10px] font-mono text-white/25 bg-white/5 px-1.5 py-0.5 rounded">
                   S{module.sprint}
@@ -306,7 +306,7 @@ export function ModuleCard({
           {module.taskName && (
             <div className="flex items-start gap-1.5 px-2.5 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20">
               <span className="text-[10px] font-bold text-orange-400 shrink-0 mt-0.5">TASK</span>
-              <span className="text-[11px] text-orange-300/80 leading-snug">{module.taskName}</span>
+              <span className="text-[11px] text-orange-300/80 leading-snug break-words min-w-0">{module.taskName}</span>
             </div>
           )}
 
@@ -548,7 +548,7 @@ export function ModuleCard({
                 ].map(({ icon, label, value, setter, placeholder, savedUrl }) => {
                   const isSaved = Boolean(savedUrl && savedUrl.trim().length > 0)
                   return (
-                    <div key={label} className="flex items-center gap-2">
+                    <div key={label} className="flex items-center gap-2 min-w-0">
                       <span className={cn('shrink-0 transition-colors', isSaved ? 'text-emerald-400/70' : 'text-white/25')}>{icon}</span>
                       <input
                         type="url"
@@ -556,7 +556,7 @@ export function ModuleCard({
                         onChange={(e) => setter(e.target.value)}
                         placeholder={placeholder}
                         className={cn(
-                          'flex-1 px-2.5 py-1.5 rounded-lg text-[11px]',
+                          'flex-1 min-w-0 w-full px-2.5 py-1.5 rounded-lg text-[11px]',
                           'bg-white/[0.03] border transition-all',
                           isSaved ? 'border-emerald-500/20 focus:border-emerald-400/40' : 'border-white/[0.07] focus:border-amber-400/30',
                           'text-white/70 placeholder:text-white/15 focus:outline-none'
