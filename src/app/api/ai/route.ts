@@ -386,45 +386,49 @@ Following your system instructions for TEXT CAPSULE INGESTION, structure this in
 3. 💻 Actionable Code/Commands (1-3 concrete Dart/Flutter/shell examples)
 4. 📋 NotebookLM Format (clean structured summary for import — no code fences)`,
 
-      'generate-schedule': `You are a Principal Software Engineer & Technical Mentor conducting an adaptive study session design.
+      'generate-schedule': `You are a Principal Software Engineer & Technical Mentor designing an adaptive study session.
 
-The student has ${moduleTitle.replace('Available: ', '').replace(', Energy: ', ' available, energy level: ')} today.
-
-## Eligible Unlocked Modules (prerequisite-checked, DAG-ordered):
+STUDENT CONTEXT:
+- Available time: ${moduleTitle.replace('Available: ', '').replace(', Energy: ', ' | Energy: ')}
+- Eligible unlocked modules (prerequisite-verified, DAG-ordered):
 ${userInput}
 
-## Your Mission:
-Design a laser-focused study session using **Elastic Time-Boxing**:
-- **Core Mission** = 75–85% of the student's available time. Select 1–3 modules that maximally advance the student.
-- **Bonus Stretch Goal** = Exactly 15–25 minutes. One optional high-leverage micro-task for when the student finishes early.
-- **Buffer** = The remaining minutes. Display this as a readiness margin.
+MISSION: Design a laser-focused session using Elastic Time-Boxing:
+- Core Tasks = 75–85% of available time. Select 1–3 modules that maximally advance the student.
+- Bonus Task = exactly 15–25 minutes. One optional high-leverage micro-task.
+- Buffer = remaining minutes.
 
-## Energy-Matching Rules:
+ENERGY-MATCHING RULES:
 - deep-code: Prioritize architecture, BLoC, Docker, Clean Architecture, SQL/database modules
 - balanced: Mix one heavy module (Flutter/Dart coding) + one lighter conceptual module
 - micro: Short videos, soft skills (Sprint 5 Career track), UX/Design, micro-learning badges
 
-## Output Format (respond ONLY with this structure — no preamble):
+CRITICAL RULES:
+1. ALL output text must be in ENGLISH ONLY. No Arabic, no RTL characters whatsoever.
+2. Respond ONLY with the delimited block below — zero preamble, zero explanation outside it.
+3. The JSON inside must be valid — no trailing commas, no comments.
 
 ---SCHEDULE_START---
-TOTAL_MINUTES: [number]
-STRATEGY: [2-3 sentences in Arabic explaining WHY these modules were chosen — rationale based on their sprint position, energy, and prerequisites]
-
-CORE_MISSION:
-- MODULE_ID: [module_id or "custom"]
-  TITLE: [exact module title]
-  DURATION_MINUTES: [number]
-  SPRINT: [sprint number]
-  TRACK: [track name]
-  WHY: [1 concise sentence — what makes this the priority right now]
-  POMODORO_TIP: [specific technique: "Use 25/5 Pomodoro × 2 rounds. Focus on X concept first."]
-
-BONUS_GOAL:
-  TITLE: [specific micro-task, e.g. "Review BLoC Events flashcards" or "Sketch ERD for capstone idea"]
-  DURATION_MINUTES: [15-25]
-  DESCRIPTION: [exactly what to do — actionable, specific, no vague advice]
-
-BUFFER_MINUTES: [remaining minutes]
+{
+  "strategySummary": "1-2 sentences of crisp senior engineering rationale in English — WHY these modules based on sprint position, energy, and dependencies.",
+  "focusTags": ["Tag1", "Tag2", "Tag3"],
+  "totalAllocatedMinutes": <total available minutes as integer>,
+  "coreTasks": [
+    {
+      "moduleId": "<exact module id from the list above>",
+      "title": "<exact module title>",
+      "durationMinutes": <integer>,
+      "deliverableGoal": "<1 sentence — what the student must produce or master by end of this block>"
+    }
+  ],
+  "bonusTask": {
+    "moduleId": "<module id or 'custom'>",
+    "title": "<specific micro-task title>",
+    "durationMinutes": <15-25>,
+    "deliverableGoal": "<actionable, specific — exactly what to do>"
+  },
+  "bufferMinutes": <remaining integer>
+}
 ---SCHEDULE_END---`,
     }
 

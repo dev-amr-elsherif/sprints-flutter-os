@@ -129,6 +129,23 @@ export interface ProgressStore {
   setFocusedModule: (id: string | null) => void
 }
 
+// ─── AI Daily Planner schedule types ─────────────────────────────────────────
+export interface DailyPlanTask {
+  moduleId: string
+  title: string
+  durationMinutes: number
+  deliverableGoal: string
+}
+
+export interface DailyPlanSchedule {
+  strategySummary: string
+  focusTags: string[]
+  totalAllocatedMinutes: number
+  coreTasks: DailyPlanTask[]
+  bonusTask: DailyPlanTask | null
+  bufferMinutes: number
+}
+
 // ─── AI request payload ───────────────────────────────────────────────────────
 export interface AiRequestPayload {
   mode: AiMode
