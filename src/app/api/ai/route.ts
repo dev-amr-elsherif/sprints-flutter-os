@@ -380,12 +380,36 @@ Requirements:
     }
 
     const prompts: Record<string, string> = {
-      'task-checker': `Module: "${moduleTitle}"
+      'task-checker': `You are Sherif, Principal Technical Mentor. Conduct a SENIOR ARCHITECT CODE REVIEW for this submission.
+
+Module: "${moduleTitle}"
 Student submission:
 \`\`\`
-${userInput || '(no submission — provide general guidance for this module)'}
+${userInput || '(no submission — provide general architectural guidance for this module)'}
 \`\`\`
-Apply the Task Reviewer Rubric from your system instructions. Be specific, use Flutter/Dart idiom references.`,
+
+OUTPUT FORMAT — You MUST use EXACTLY these section headers in this order (copy them verbatim):
+
+### 🏆 VERDICT: [STATUS_TAG] ([SCORE]/100)
+Replace [STATUS_TAG] with exactly one of: PRODUCTION_READY | NEEDS_REFACTOR | ARCHITECTURAL_GAP
+Replace [SCORE] with a number 0-100. One sentence justification on the same line.
+
+### 🏗️ Architecture & Clean Code
+Evaluate: SOLID adherence, layer boundaries (Domain/Data/Presentation), separation of concerns, dependency injection, naming conventions. 3-4 bullet points with specific references to the submitted code.
+
+### ⚡ Performance & State Efficiency
+Evaluate: Widget rebuild optimization (buildWhen, Selector), BLoC event coalescing, memory leaks (StreamSubscription disposal), network efficiency (caching, retry, debounce), unnecessary recompositions. 3-4 bullet points.
+
+### 🛡️ Edge Cases & Error Handling
+Evaluate: Null safety, network failure handling, empty state UI, loading state management, permission denial flows, defensive guards. 3-4 bullet points.
+
+### 💡 Recommended Refactor
+Provide the single most impactful code change as a precise before/after diff or improved snippet. Use a fenced dart/sql/bash code block. Keep it under 30 lines total — surgical, not exhaustive.
+
+CRITICAL RULES:
+- Use EXACTLY the emoji+heading text above — the client parses them.
+- Be surgical and specific. Reference actual code patterns from the submission.
+- Score honestly: < 70 = ARCHITECTURAL_GAP, 70-84 = NEEDS_REFACTOR, >= 85 = PRODUCTION_READY.`,
 
       'interview': `The student completed: "${moduleTitle}"
 ${userInput ? `Their context: ${userInput}` : ''}

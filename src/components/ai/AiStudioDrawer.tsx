@@ -234,6 +234,226 @@ function LIScope({ scope, onScopeChange, selectedSprint, onSprintChange, selecte
   )
 }
 
+// ─── Rubric Renderer (Task Review structured output) ──────────────────────────
+type VerdictStatus = 'PRODUCTION_READY' | 'NEEDS_REFACTOR' | 'ARCHITECTURAL_GAP' | null
+
+interface RubricSection {
+  key: string
+  heading: string
+  body: string
+}
+
+function parseRubric(text: string): { verdict: { status: VerdictStatus; score: number | null; note: string } | null; sections: RubricSection[]; raw: string } {
+  // Find verdict line: ### 🏆 VERDICT: STATUS (SCORE/100) rest
+  const verdictRe = /###\s*🏆\s*VERDICT:\s*(PRODUCTION_READY|NEEDS_REFACTOR|ARCHITECTURAL_GAP)\s*\((\d+)\/100\)(.*)/
+  const verdictMatch = text.match(verdictRe)
+  const verdict = verdictMatch
+    ? { status: verdictMatch[1] as VerdictStatus, score: parseInt(verdictMatch[2], 10), note: verdictMatch[3].trim() }
+    : null
+
+  const SECTION_KEYS = [
+    { key: 'arch',    re: /###\s*🏗️\s*Architecture(?:\s*&\s*|\s+and\s+)Clean Code/i },
+    { key: 'perf',    re: /###\s*⚡\s*Performance(?:\s*&\s*|\s+and\s+)State Efficiency/i },
+    { key: 'edge',    re: /###\s*🛡️\s*Edge Cases(?:\s*&\s*|\s+and\s+)Error Handling/i },
+    { key: 'refactor',re: /###\s*💡\s*Recommended Refactor/i },
+  ]
+
+  // Split by h3 section markers
+  const sections: RubricSection[] = []
+  const lines = text.split('\n')
+  let current: { key: string; heading: string; lines: string[] } | null = null
+
+  for (const line of lines) {
+    // Check if this line starts a known section
+    const match = SECTION_KEYS.find((s) => s.re.test(line))
+    if (match) {
+      if (current) sections.push({ key: current.key, heading: current.heading, body: current.lines.join('\n').trim() })
+      current = { key: match.key, heading: line.replace(/^###\s*/, '').trim(), lines: [] }
+    } else if (current && !verdictRe.test(line)) {
+      current.lines.push(line)
+    }
+  }
+  if (current) sections.push({ key: current.key, heading: current.heading, body: current.lines.join('\n').trim() })
+
+  return { verdict, sections, raw: text }
+}
+
+function VerdictBadge({ verdict }: { verdict: NonNullable<ReturnType<typeof parseRubric>['verdict']> }) {
+  const { status, score, note } = verdict
+  const cfg =
+    status === 'PRODUCTION_READY'
+      ? { bg: 'bg-emerald-500/15 border-emerald-400/30', text: 'text-emerald-300', glow: 'shadow-[0_0_20px_rgba(16,185,129,0.25)]', label: '✅ PRODUCTION READY' }
+      : status === 'NEEDS_REFACTOR'
+        ? { bg: 'bg-amber-500/15 border-amber-400/30', text: 'text-amber-300', glow: 'shadow-[0_0_20px_rgba(245,158,11,0.2)]', label: '⚠️ NEEDS REFACTOR' }
+        : { bg: 'bg-rose-500/15 border-rose-400/30', text: 'text-rose-300', glow: 'shadow-[0_0_20px_rgba(244,63,94,0.2)]', label: '🚨 ARCHITECTURAL GAP' }
+
+  const scoreColor =
+    (score ?? 0) >= 85 ? 'text-emerald-400' : (score ?? 0) >= 70 ? 'text-amber-400' : 'text-rose-400'
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+      className={cn('flex items-center gap-3 p-3 rounded-xl border', cfg.bg, cfg.glow)}>
+      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+        <span className={cn('text-xs font-bold tracking-wide', cfg.text)}>{cfg.label}</span>
+        {note && <span className="text-[11px] text-white/45 leading-snug">{note}</span>}
+      </div>
+      {score !== null && (
+        <div className={cn('shrink-0 text-2xl font-black tabular-nums', scoreColor)}>
+          {score}<span className="text-xs font-normal text-white/30">/100</span>
+        </div>
+      )}
+    </motion.div>
+  )
+}
+
+function RubricSectionCard({ section }: { section: RubricSection }) {
+  const [copiedCode, setCopiedCode] = useState(false)
+
+  const CARD_META: Record<string, { border: string; icon: string; iconCls: string }> = {
+    arch:     { border: 'border-l-cyan-400/50',    icon: '🏗️', iconCls: 'text-cyan-300' },
+    perf:     { border: 'border-l-purple-400/50',  icon: '⚡', iconCls: 'text-purple-300' },
+    edge:     { border: 'border-l-amber-400/50',   icon: '🛡️', iconCls: 'text-amber-300' },
+    refactor: { border: 'border-l-emerald-400/50', icon: '💡', iconCls: 'text-emerald-300' },
+  }
+  const m = CARD_META[section.key] ?? { border: 'border-l-white/20', icon: '📋', iconCls: 'text-white/40' }
+
+  // For refactor card: extract code block for copy
+  const codeMatch = section.body.match(/```[\w]*\n([\s\S]*?)```/)
+  const codeSnippet = codeMatch?.[1]?.trim() ?? null
+
+  const handleCopyCode = async () => {
+    if (!codeSnippet) return
+    await navigator.clipboard.writeText(codeSnippet)
+    setCopiedCode(true)
+    setTimeout(() => setCopiedCode(false), 2000)
+  }
+
+  // Render body as simple HTML — minimal, since it's already structured markdown
+  const bodyHtml = section.body
+    .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre class="bg-black/30 border border-white/[0.07] rounded-lg p-3 text-[11px] font-mono text-cyan-200 overflow-x-auto my-2 leading-relaxed whitespace-pre-wrap">$1</pre>')
+    .replace(/^- (.+)$/gm, '<li class="flex gap-1.5 text-[12px] text-white/60 leading-relaxed"><span class="text-white/25 mt-0.5 shrink-0">•</span><span>$1</span></li>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white/80 font-semibold">$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="bg-white/10 text-cyan-300 px-1 py-0.5 rounded text-[11px] font-mono">$1</code>')
+    .replace(/\n\n/g, '</p><p class="text-[12px] text-white/55 my-1">')
+    .replace(/\n/g, '<br/>')
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+      className={cn('rounded-xl bg-white/[0.03] border border-white/[0.07] border-l-2 overflow-hidden', m.border)}>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.05]">
+        <span className={cn('text-xs font-semibold', m.iconCls)}>{section.heading}</span>
+        {section.key === 'refactor' && codeSnippet && (
+          <button onClick={handleCopyCode}
+            className="flex items-center gap-1 text-[10px] text-white/30 hover:text-emerald-300 transition-colors">
+            {copiedCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Clipboard className="w-3 h-3" />}
+            {copiedCode ? 'Copied!' : 'Copy snippet'}
+          </button>
+        )}
+      </div>
+      <div className="px-3 py-2.5"
+        dangerouslySetInnerHTML={{ __html: `<p class="text-[12px] text-white/55">${bodyHtml}</p>` }} />
+    </motion.div>
+  )
+}
+
+function RubricRenderer({ text, isStreaming }: { text: string; isStreaming: boolean }) {
+  const { verdict, sections } = parseRubric(text)
+  const hasStructure = verdict !== null || sections.length > 0
+
+  if (!hasStructure) {
+    // Streaming but no structured output yet — show raw MD with typing cursor
+    return <MD text={text} />
+  }
+
+  return (
+    <div className="space-y-3">
+      {verdict && <VerdictBadge verdict={verdict} />}
+      {sections.map((s) => <RubricSectionCard key={s.key} section={s} />)}
+      {isStreaming && sections.length === 0 && <MD text={text} />}
+    </div>
+  )
+}
+
+// ─── LinkedIn Post Utilities ───────────────────────────────────────────────────
+function LinkedInPostUtils({ text, onClear }: { text: string; onClear: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  const cleanText = text.replace(ACTION_RE, '').trim()
+  const charCount = cleanText.length
+  const wordCount = cleanText.trim().split(/\s+/).filter(Boolean).length
+
+  // Hook preview: first 180 chars
+  const hookPreview = cleanText.slice(0, 180)
+  const hookLines = cleanText.split('\n').slice(0, 3).join('\n')
+
+  const lengthStatus =
+    charCount < 500
+      ? { cls: 'text-amber-400', icon: '🟡', label: 'Too short for maximum reach' }
+      : charCount <= 1800
+        ? { cls: 'text-emerald-400', icon: '🟢', label: 'Optimal engagement length' }
+        : charCount <= 2500
+          ? { cls: 'text-amber-400', icon: '🟡', label: 'Getting long — trim for reach' }
+          : { cls: 'text-rose-400', icon: '🔴', label: 'Approaching character limit' }
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(cleanText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  return (
+    <div className="space-y-3 mt-2">
+      {/* Hook Preview */}
+      <div className="p-3 rounded-xl bg-blue-500/[0.06] border border-blue-400/20">
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="text-sm">👁️</span>
+          <span className="text-[11px] font-semibold text-blue-300">Above-The-Fold Hook Preview</span>
+          <span className="text-[9px] text-white/25 ml-auto">~first 180 chars</span>
+        </div>
+        <p className="text-[11px] text-white/60 leading-relaxed font-medium border-l-2 border-blue-400/30 pl-2.5 italic">
+          {hookLines || hookPreview}
+          {cleanText.length > 180 && <span className="text-white/25 not-italic"> …see more</span>}
+        </p>
+        <p className="text-[9px] text-white/25 mt-1.5">Verify your hook captures attention before the fold</p>
+      </div>
+
+      {/* Metrics bar */}
+      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+        <span className="text-[11px] text-white/40 font-mono">{charCount.toLocaleString()} chars</span>
+        <span className="text-white/15">•</span>
+        <span className="text-[11px] text-white/40 font-mono">{wordCount} words</span>
+        <span className="text-white/15 mx-1">|</span>
+        <span className={cn('text-[11px] font-medium flex items-center gap-1', lengthStatus.cls)}>
+          {lengthStatus.icon} {lengthStatus.label}
+        </span>
+      </div>
+
+      {/* One-click actions */}
+      <div className="flex items-center gap-2">
+        <button onClick={handleCopy}
+          className={cn(
+            'flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95',
+            copied
+              ? 'text-emerald-300 bg-emerald-500/15 border-emerald-400/30'
+              : 'text-white/60 bg-white/[0.04] border-white/[0.08] hover:text-white hover:bg-white/[0.08]'
+          )}>
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Clipboard className="w-3.5 h-3.5" />}
+          {copied ? '✓ Copied to Clipboard!' : '📋 Copy Full Post'}
+        </button>
+        <a href="https://www.linkedin.com/feed/" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border border-blue-400/25 text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 transition-all active:scale-95">
+          <Linkedin className="w-3.5 h-3.5" />
+          🚀 Open LinkedIn
+        </a>
+        <button onClick={onClear}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white/30 hover:text-white/60 hover:bg-white/5 transition-all ml-auto">
+          <RotateCcw className="w-3.5 h-3.5" /> Clear
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Shared chat bubble ───────────────────────────────────────────────────────
 function ChatBubble({ msg, moduleId }: { msg: InterviewMsg; moduleId: string | null }) {
   const isSherif = msg.role === 'sherif'
@@ -565,7 +785,6 @@ function AskSherifPanel({ moduleId, moduleTitle }: { moduleId: string | null; mo
 export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudioDrawerProps) {
   const [activeTab, setActiveTab] = useState<StudioMode>(initialMode)
   const [userInput, setUserInput] = useState('')
-  const [copied, setCopied] = useState(false)
   const [healthStatus, setHealthStatus] = useState<HealthStatus>('idle')
   const [healthMessage, setHealthMessage] = useState('')
   const [healthLatency, setHealthLatency] = useState<number | undefined>()
@@ -677,7 +896,7 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                   {(['task-checker', 'linkedin'] as const).map((tabId) => {
                     const tab = TABS_CONFIG.find((t) => t.id === tabId)!
                     return (
-                      <Tabs.Content key={tabId} value={tabId} className="flex-1 flex flex-col gap-3 p-5 overflow-y-auto scrollbar-none">
+                      <Tabs.Content key={tabId} value={tabId} className="flex-1 flex flex-col gap-3 p-5 overflow-y-auto scrollbar-none custom-scrollbar">
                         {tabId === 'linkedin' && (
                           <LIScope scope={linkedInScope} onScopeChange={(s) => { setLinkedInScope(s); handleClear() }}
                             selectedSprint={selectedSprint} onSprintChange={(s) => { setSelectedSprint(s); handleClear() }}
@@ -692,42 +911,55 @@ export function AiStudioDrawer({ open, onClose, initialMode, moduleId }: AiStudi
                             className="w-full rounded-xl px-4 py-3 bg-white/[0.04] border border-white/[0.08] text-sm text-white/80 placeholder:text-white/20 focus:outline-none focus:border-purple-400/40 focus:bg-white/[0.06] transition-all resize-none font-mono scrollbar-none" />
                         </div>
 
+                        {/* Action bar */}
                         <div className="flex items-center gap-2 shrink-0">
                           <button onClick={handleRun} disabled={isLoading || isStreaming || !canRun}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-purple-500/80 hover:bg-purple-500 text-white transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg">
                             {isLoading || isStreaming ? <Bot className="w-4 h-4 animate-pulse" /> : <Send className="w-4 h-4" />}
-                            {isLoading ? 'Thinking...' : isStreaming ? 'Streaming...' : 'Evaluate with AI'}
+                            {isLoading ? 'Thinking...' : isStreaming ? 'Streaming...' : tabId === 'task-checker' ? 'Review with Sherif' : 'Generate Post'}
                           </button>
-                          {response && (
-                            <>
-                              <button onClick={async () => { await navigator.clipboard.writeText(response); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white/50 hover:text-white/80 hover:bg-white/5 transition-all">
-                                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Clipboard className="w-3.5 h-3.5" />}
-                                {copied ? 'Copied!' : 'Copy'}
-                              </button>
-                              <button onClick={handleClear} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white/50 hover:text-white/80 hover:bg-white/5 transition-all">
-                                <RotateCcw className="w-3.5 h-3.5" /> Clear
-                              </button>
-                            </>
+                          {/* Generic copy + clear for task-checker only; linkedin has its own utils */}
+                          {response && tabId === 'task-checker' && (
+                            <button onClick={handleClear} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs text-white/50 hover:text-white/80 hover:bg-white/5 transition-all">
+                              <RotateCcw className="w-3.5 h-3.5" /> Clear
+                            </button>
                           )}
                           {isMock && <span className="text-[10px] text-amber-400/60 flex items-center gap-1 ml-auto"><FlaskConical className="w-3 h-3" /> Mock mode</span>}
                         </div>
 
+                        {/* Result area */}
                         {(response || isLoading || error) && (
                           <div className="flex-1 min-h-0">
-                            <div className={cn('rounded-xl p-4 min-h-[100px] bg-white/[0.03] border border-white/[0.06] overflow-y-auto', isStreaming && 'typing-cursor')}>
-                              {error ? <p className="text-sm text-red-400">{error}</p>
-                                : isLoading ? <div className="flex items-center gap-2 text-sm text-white/30"><Bot className="w-4 h-4 animate-pulse text-purple-400" /> Generating...</div>
-                                  : <MD text={response} />}
-                            </div>
+                            {error ? (
+                              <div className="rounded-xl p-4 bg-red-500/[0.05] border border-red-400/20">
+                                <p className="text-sm text-red-400">{error}</p>
+                              </div>
+                            ) : isLoading ? (
+                              <div className="flex items-center gap-2 text-sm text-white/30 p-4">
+                                <Bot className="w-4 h-4 animate-pulse text-purple-400" /> Sherif is preparing your review…
+                              </div>
+                            ) : tabId === 'task-checker' ? (
+                              <div className={cn('rounded-xl p-4 bg-white/[0.02] border border-white/[0.05] overflow-y-auto custom-scrollbar', isStreaming && 'typing-cursor')}>
+                                <RubricRenderer text={response} isStreaming={isStreaming} />
+                              </div>
+                            ) : (
+                              /* LinkedIn result */
+                              <div className="space-y-0">
+                                <div className={cn('rounded-xl p-4 bg-white/[0.02] border border-white/[0.05] overflow-y-auto custom-scrollbar max-h-72', isStreaming && 'typing-cursor')}>
+                                  <MD text={response} />
+                                </div>
+                                {!isStreaming && <LinkedInPostUtils text={response} onClear={handleClear} />}
+                              </div>
+                            )}
                           </div>
                         )}
 
+                        {/* Empty state */}
                         {!response && !isLoading && !error && (
                           <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 opacity-30">
                             <Sparkles className="w-10 h-10 text-purple-400" />
                             <p className="text-sm text-white/50 max-w-xs">
-                              {tabId === 'task-checker' && 'Paste your code, SQL schema, Dockerfile, or network config — then get rubric-based feedback from Sherif.'}
+                              {tabId === 'task-checker' && 'Paste your code, SQL schema, Dockerfile, or network config — Sherif will give you a structured Senior Architect rubric review.'}
                               {tabId === 'linkedin' && 'Choose scope, add context, and generate a high-impact post for Module, Sprint, or Track mastery.'}
                             </p>
                           </div>
